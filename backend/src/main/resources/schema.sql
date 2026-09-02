@@ -7,19 +7,13 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS auth_tokens (
-    token TEXT PRIMARY KEY,
-    user_id INTEGER,
-    created_at TEXT,
-    expires_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS api_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    name TEXT,
-    api_key TEXT UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
     created_at TEXT,
-    last_used_at TEXT
+    access_expires_at TEXT,
+    refresh_expires_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stocks (
@@ -75,6 +69,5 @@ CREATE TABLE IF NOT EXISTS conditions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conditions_status ON conditions(status);

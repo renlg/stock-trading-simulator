@@ -30,7 +30,7 @@ class ConditionServiceTest {
     void prepare() {
         jdbc.update("DELETE FROM orders"); jdbc.update("DELETE FROM positions");
         jdbc.update("DELETE FROM conditions"); jdbc.update("DELETE FROM auth_tokens");
-        jdbc.update("DELETE FROM api_keys"); jdbc.update("DELETE FROM users");
+        jdbc.update("DELETE FROM users");
         jdbc.update("DELETE FROM stocks");
         jdbc.update("INSERT INTO users(username,password_hash,balance,created_at) VALUES('条件测试','x',1000000,'now')");
         userId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);

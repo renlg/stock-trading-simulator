@@ -12,7 +12,6 @@ spring:
 
 stock:
   initial-balance: ${STOCK_INIT_BALANCE:1000000}
-  token-expire-days: 7
   quote:
     enabled: true
     interval-ms: 2000

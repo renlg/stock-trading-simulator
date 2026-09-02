@@ -23,7 +23,3 @@ export interface Order {
 export interface Account {
   balance: number; marketValue: number; totalAssets: number; totalProfit: number; positions: Position[]
 }
-
-export interface ApiKeyItem {
-  id: number | string; name: string; apiKeyMask: string; createdAt: string; lastUsedAt?: string | null
-}

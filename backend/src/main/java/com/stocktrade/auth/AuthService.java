@@ -1,8 +1,8 @@
 package com.stocktrade.auth;
 
 import com.stocktrade.common.BusinessException;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -11,23 +11,47 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class AuthService {
     private static final DateTimeFormatter FORMAT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final long ACCESS_TOKEN_HOURS = 8;
+    private static final long REFRESH_TOKEN_DAYS = 30;
+
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private final double initialBalance;
-    private final long expireDays;
 
     public AuthService(JdbcTemplate jdbc,
-                       @Value("${stock.initial-balance:1000000}") double initialBalance,
-                       @Value("${stock.token-expire-days:7}") long expireDays) {
+                       @Value("${stock.initial-balance:1000000}") double initialBalance) {
         this.jdbc = jdbc;
         this.initialBalance = initialBalance;
-        this.expireDays = expireDays;
+    }
+
+    @PostConstruct
+    void migrateAuthTokens() {
+        List<Map<String, Object>> columns = jdbc.queryForList("PRAGMA table_info(auth_tokens)");
+        boolean hasAccessToken = columns.stream().anyMatch(c -> "access_token".equals(c.get("name")));
+        if (!hasAccessToken) {
+            jdbc.execute("DROP TABLE IF EXISTS auth_tokens");
+            jdbc.execute("""
+                    CREATE TABLE auth_tokens (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        access_token TEXT NOT NULL,
+                        refresh_token TEXT NOT NULL,
+                        created_at TEXT,
+                        access_expires_at TEXT,
+                        refresh_expires_at TEXT
+                    )""");
+        }
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_tokens_access ON auth_tokens(access_token)");
+        jdbc.execute("CREATE INDEX IF NOT EXISTS idx_tokens_refresh ON auth_tokens(refresh_token)");
+        jdbc.execute("DROP TABLE IF EXISTS api_keys");
     }
 
     @Transactional
@@ -49,11 +73,29 @@ public class AuthService {
         if (users.isEmpty() || !encoder.matches(password, users.get(0).passwordHash()))
             throw BusinessException.unauthorized("用户名或密码错误");
         UserAuth user = users.get(0);
-        String token = randomHex();
-        LocalDateTime created = LocalDateTime.now();
-        jdbc.update("INSERT INTO auth_tokens(token,user_id,created_at,expires_at) VALUES(?,?,?,?)",
-                token, user.id(), created.format(FORMAT), created.plusDays(expireDays).format(FORMAT));
-        return Map.of("token", token, "username", user.username());
+        return createTokenPair(user.id(), user.username());
+    }
+
+    @Transactional
+    public Map<String, Object> refresh(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank())
+            throw BusinessException.badRequest("请提供刷新令牌");
+        var rows = jdbc.query("SELECT id,user_id FROM auth_tokens WHERE refresh_token=? AND refresh_expires_at>?",
+                (rs, n) -> new TokenRow(rs.getLong("id"), rs.getLong("user_id")),
+                refreshToken, now());
+        if (rows.isEmpty()) throw BusinessException.unauthorized("刷新令牌无效或已过期");
+        TokenRow row = rows.get(0);
+
+        jdbc.update("DELETE FROM auth_tokens WHERE id=?", row.id);
+
+        var userRows = jdbc.query("SELECT username FROM users WHERE id=?", (rs, n) -> rs.getString(1), row.userId);
+        String username = userRows.isEmpty() ? "" : userRows.get(0);
+        return createTokenPair(row.userId, username);
+    }
+
+    @Transactional
+    public void logout(String accessToken) {
+        jdbc.update("DELETE FROM auth_tokens WHERE access_token=?", accessToken);
     }
 
     public Map<String, Object> me(long userId) {
@@ -64,9 +106,27 @@ public class AuthService {
         return rows.get(0);
     }
 
-    public Long authenticateToken(String token) {
-        var ids = jdbc.query("SELECT user_id FROM auth_tokens WHERE token=? AND expires_at>?", (rs, n) -> rs.getLong(1), token, now());
+    public Long authenticateAccessToken(String token) {
+        var ids = jdbc.query("SELECT user_id FROM auth_tokens WHERE access_token=? AND access_expires_at>?",
+                (rs, n) -> rs.getLong(1), token, now());
         return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    private Map<String, Object> createTokenPair(long userId, String username) {
+        String accessToken = randomHex();
+        String refreshToken = randomHex();
+        LocalDateTime created = LocalDateTime.now();
+        String accessExpires = created.plusHours(ACCESS_TOKEN_HOURS).format(FORMAT);
+        String refreshExpires = created.plusDays(REFRESH_TOKEN_DAYS).format(FORMAT);
+        jdbc.update("INSERT INTO auth_tokens(user_id,access_token,refresh_token,created_at,access_expires_at,refresh_expires_at) VALUES(?,?,?,?,?,?)",
+                userId, accessToken, refreshToken, created.format(FORMAT), accessExpires, refreshExpires);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("accessToken", accessToken);
+        result.put("refreshToken", refreshToken);
+        result.put("expiresIn", ACCESS_TOKEN_HOURS * 3600);
+        result.put("refreshExpiresIn", REFRESH_TOKEN_DAYS * 86400);
+        result.put("username", username);
+        return result;
     }
 
     private void validateCredentials(String username, String password) {
@@ -88,4 +148,5 @@ public class AuthService {
 
     public static String now() { return LocalDateTime.now().format(FORMAT); }
     private record UserAuth(long id, String username, String passwordHash) {}
+    private record TokenRow(long id, long userId) {}
 }

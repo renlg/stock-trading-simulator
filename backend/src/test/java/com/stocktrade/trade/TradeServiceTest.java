@@ -51,7 +51,6 @@ class TradeServiceTest {
         jdbc.update("DELETE FROM positions");
         jdbc.update("DELETE FROM conditions");
         jdbc.update("DELETE FROM auth_tokens");
-        jdbc.update("DELETE FROM api_keys");
         jdbc.update("DELETE FROM users");
         jdbc.update("DELETE FROM watch_stocks");
         jdbc.update("DELETE FROM stocks");

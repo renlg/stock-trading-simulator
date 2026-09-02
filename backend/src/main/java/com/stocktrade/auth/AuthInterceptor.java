@@ -1,7 +1,6 @@
 package com.stocktrade.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stocktrade.apikey.ApiKeyService;
 import com.stocktrade.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,12 +14,10 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
     private final AuthService authService;
-    private final ApiKeyService apiKeyService;
     private final ObjectMapper mapper;
 
-    public AuthInterceptor(AuthService authService, ApiKeyService apiKeyService, ObjectMapper mapper) {
+    public AuthInterceptor(AuthService authService, ObjectMapper mapper) {
         this.authService = authService;
-        this.apiKeyService = apiKeyService;
         this.mapper = mapper;
     }
 
@@ -30,9 +27,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ") || header.length() <= 7)
             return reject(response, "请提供有效的身份凭证");
-        String credential = header.substring(7).trim();
-        Long userId = request.getRequestURI().startsWith("/api/v1/")
-                ? apiKeyService.authenticate(credential) : authService.authenticateToken(credential);
+        String accessToken = header.substring(7).trim();
+        Long userId = authService.authenticateAccessToken(accessToken);
         if (userId == null) return reject(response, "未登录或凭证已失效");
         request.setAttribute(AuthContext.USER_ID, userId);
         return true;

@@ -6,13 +6,13 @@ import api from '../api'
 import type { ApiResponse } from '../types'
 import { getData } from '../utils'
 
-interface AuthResult { token: string; username: string }
+interface AuthResult { accessToken: string; refreshToken: string; username: string }
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  if (localStorage.getItem('token')) return <Navigate to="/quotes" replace />
+  if (localStorage.getItem('accessToken')) return <Navigate to="/quotes" replace />
 
   const submit = async (values: { username: string; password: string }) => {
     setLoading(true)
@@ -25,11 +25,12 @@ export default function LoginPage() {
         setMode('login')
         return
       }
-      if (!result?.token) {
+      if (!result?.accessToken) {
         message.error('登录响应中缺少令牌')
         return
       }
-      localStorage.setItem('token', result.token)
+      localStorage.setItem('accessToken', result.accessToken)
+      localStorage.setItem('refreshToken', result.refreshToken)
       localStorage.setItem('username', result.username || values.username)
       message.success('登录成功')
       navigate('/quotes', { replace: true })

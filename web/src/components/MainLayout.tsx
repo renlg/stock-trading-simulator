@@ -1,4 +1,4 @@
-import { ApiOutlined, BarChartOutlined, ExperimentOutlined, KeyOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SwapOutlined } from '@ant-design/icons'
+import { ApiOutlined, BarChartOutlined, ExperimentOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SwapOutlined } from '@ant-design/icons'
 import { Button, Layout, Menu, Space, Typography } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -11,7 +11,6 @@ const items = [
   { key: '/conditions', icon: <ApiOutlined />, label: '条件单' },
   { key: '/account', icon: <BarChartOutlined />, label: '资金统计' },
   { key: '/orders', icon: <OrderedListOutlined />, label: '订单历史' },
-  { key: '/apikey', icon: <KeyOutlined />, label: '账号设置' },
   { key: '/backtest', icon: <ExperimentOutlined />, label: '策略回测' },
 ]
 
@@ -19,7 +18,8 @@ export default function MainLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const logout = () => {
-    localStorage.removeItem('token')
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
     localStorage.removeItem('username')
     navigate('/login', { replace: true })
   }
