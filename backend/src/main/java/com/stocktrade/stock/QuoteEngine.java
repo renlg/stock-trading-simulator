@@ -75,6 +75,12 @@ public class QuoteEngine {
     private void refreshFromRealData() {
         List<Map<String, Object>> watch = pool.watchList();
         String now = AuthService.now();
+        // 同步池: 移除已不在 watch_stocks 的行情(支持"删除股票"后立即从列表消失)
+        java.util.Set<String> active = new java.util.HashSet<>();
+        for (Map<String, Object> w : watch) active.add((String) w.get("code"));
+        for (StockQuote q : stocks.all()) {
+            if (!active.contains(q.code())) stocks.remove(q.code());
+        }
         for (Map<String, Object> w : watch) {
             String code = (String) w.get("code");
             String name = (String) w.get("name");

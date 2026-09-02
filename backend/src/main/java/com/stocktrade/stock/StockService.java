@@ -42,4 +42,6 @@ public class StockService {
     }
 
     public void put(StockQuote quote) { quotes.put(quote.code(), quote); }
+
+    public void remove(String code) { quotes.remove(code); }
 }
