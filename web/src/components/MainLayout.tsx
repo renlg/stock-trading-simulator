@@ -1,4 +1,4 @@
-import { ApiOutlined, BarChartOutlined, KeyOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SwapOutlined } from '@ant-design/icons'
+import { ApiOutlined, BarChartOutlined, ExperimentOutlined, KeyOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SwapOutlined } from '@ant-design/icons'
 import { Button, Layout, Menu, Space, Typography } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
@@ -12,6 +12,7 @@ const items = [
   { key: '/account', icon: <BarChartOutlined />, label: '资金统计' },
   { key: '/orders', icon: <OrderedListOutlined />, label: '订单历史' },
   { key: '/apikey', icon: <KeyOutlined />, label: '账号设置' },
+  { key: '/backtest', icon: <ExperimentOutlined />, label: '策略回测' },
 ]
 
 export default function MainLayout() {
