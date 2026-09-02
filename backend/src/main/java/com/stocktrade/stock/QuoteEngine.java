@@ -46,14 +46,7 @@ public class QuoteEngine {
 
     @PostConstruct
     public void initialize() {
-        // 默认精选池: 空时从A股市场自动填充(可按配置覆盖数量)
-        int defaultPool = 30;
-        try {
-            defaultPool = Integer.parseInt(System.getProperty("stock.pool.size", "30"));
-        } catch (NumberFormatException ignored) {}
-        pool.ensureDefaultPool(defaultPool);
-
-        // 用真实数据初始化内存行情
+        // 用真实数据初始化内存行情(刷新所有用户自选的并集)
         refreshFromRealData();
         stocks.reload();
         log.info("行情引擎已载入{}只真实行情(来源: /opt/a-stock)", stocks.all().size());
@@ -71,9 +64,9 @@ public class QuoteEngine {
         if (service != null) service.checkAndTrigger();
     }
 
-    /** 从 /opt/a-stock 读关注池每只最新分钟线+昨收, 更新内存行情 */
+    /** 从 /opt/a-stock 读所有用户自选并集的最新分钟线+昨收, 更新内存行情 */
     private void refreshFromRealData() {
-        List<Map<String, Object>> watch = pool.watchList();
+        List<Map<String, Object>> watch = pool.allWatchList();
         String now = AuthService.now();
         // 同步池: 移除已不在 watch_stocks 的行情(支持"删除股票"后立即从列表消失)
         java.util.Set<String> active = new java.util.HashSet<>();

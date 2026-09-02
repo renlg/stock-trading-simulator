@@ -33,9 +33,11 @@ CREATE TABLE IF NOT EXISTS stocks (
 );
 
 CREATE TABLE IF NOT EXISTS watch_stocks (
-    code TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
     name TEXT,
-    added_at TEXT
+    added_at TEXT,
+    PRIMARY KEY(user_id, code)
 );
 
 CREATE TABLE IF NOT EXISTS positions (

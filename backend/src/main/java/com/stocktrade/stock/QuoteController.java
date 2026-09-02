@@ -1,10 +1,14 @@
 package com.stocktrade.stock;
 
+import com.stocktrade.auth.AuthContext;
 import com.stocktrade.common.Result;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 public class QuoteController {
@@ -15,13 +19,18 @@ public class QuoteController {
         this.pool = pool;
     }
 
-    /** 行情列表(关注池, 来自真实分钟线) */
+    /** 行情列表(当前用户自选股, 来自引擎缓存) */
     @GetMapping("/api/quote")
-    public Result<List<QuoteResponse>> all() {
-        return Result.success(stocks.all().stream().map(QuoteResponse::from).toList());
+    public Result<List<QuoteResponse>> all(HttpServletRequest request) {
+        long userId = AuthContext.userId(request);
+        Set<String> codes = pool.watchList(userId).stream()
+                .map(w -> (String) w.get("code")).collect(Collectors.toSet());
+        return Result.success(stocks.all().stream()
+                .filter(q -> codes.contains(q.code()))
+                .map(QuoteResponse::from).toList());
     }
 
-    /** 单只行情(关注池内, 引擎缓存) */
+    /** 单只行情(引擎缓存) */
     @GetMapping({"/api/quote/{code}", "/api/v1/quote/{code}"})
     public Result<QuoteResponse> one(@PathVariable String code) {
         return Result.success(QuoteResponse.from(stocks.get(code)));
@@ -34,23 +43,26 @@ public class QuoteController {
         return Result.success(pool.search(q, limit));
     }
 
-    /** 关注池列表 */
+    /** 关注池列表(当前用户) */
     @GetMapping("/api/stocks/watch")
-    public Result<List<Map<String, Object>>> watchList() {
-        return Result.success(pool.watchList());
+    public Result<List<Map<String, Object>>> watchList(HttpServletRequest request) {
+        long userId = AuthContext.userId(request);
+        return Result.success(pool.watchList(userId));
     }
 
-    /** 添加关注(从A股全市场) */
+    /** 添加关注(当前用户, 从A股全市场) */
     @PostMapping("/api/stocks/watch")
-    public Result<Map<String, Object>> addWatch(@RequestBody WatchRequest body) {
-        pool.addWatch(body.code());
+    public Result<Map<String, Object>> addWatch(@RequestBody WatchRequest body, HttpServletRequest request) {
+        long userId = AuthContext.userId(request);
+        pool.addWatch(userId, body.code());
         return Result.success(Map.of("code", body.code(), "watched", true));
     }
 
-    /** 移除关注 */
+    /** 移除关注(当前用户) */
     @DeleteMapping("/api/stocks/watch/{code}")
-    public Result<Map<String, Object>> removeWatch(@PathVariable String code) {
-        pool.removeWatch(code);
+    public Result<Map<String, Object>> removeWatch(@PathVariable String code, HttpServletRequest request) {
+        long userId = AuthContext.userId(request);
+        pool.removeWatch(userId, code);
         return Result.success(Map.of("code", code, "watched", false));
     }
 

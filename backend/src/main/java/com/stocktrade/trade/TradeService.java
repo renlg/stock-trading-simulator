@@ -29,7 +29,7 @@ public class TradeService {
         if (quantity == null || quantity < 1) throw BusinessException.badRequest("交易数量必须为正整数");
         if (!"buy".equals(side) && !"sell".equals(side)) throw BusinessException.badRequest("交易方向只能是buy或sell");
         // 确保股票在行情池中: 不在则从真实数据源加载
-        StockQuote quote = ensureLoaded(code);
+        StockQuote quote = ensureLoaded(userId, code);
         // 成交价优先用真实实时价; 实时接口失败时降级回本地行情价
         double execPrice = realTime.fetchPrice(code);
         if (execPrice <= 0) execPrice = quote.price();
@@ -83,7 +83,7 @@ public class TradeService {
     }
 
     /** 确保股票在内存行情中: 不在则从真实数据源(/opt/a-stock)加载, 支持交易任意A股 */
-    private StockQuote ensureLoaded(String code) {
+    private StockQuote ensureLoaded(long userId, String code) {
         StockQuote quote = stocks.getOrNull(code);
         if (quote != null) return quote;
         Map<String, Object> q = pool.realQuote(code);
@@ -95,8 +95,8 @@ public class TradeService {
         double low = ((Number) q.get("low")).doubleValue();
         StockQuote loaded = new StockQuote(code, name, prevClose, price, high, low, AuthService.now());
         stocks.put(loaded);
-        // 同时加入关注池, 让行情列表能展示
-        try { pool.addWatch(code); } catch (Exception ignored) {}
+        // 同时加入该用户的关注池, 让行情列表能展示
+        try { pool.addWatch(userId, code); } catch (Exception ignored) {}
         return loaded;
     }
 

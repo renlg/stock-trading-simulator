@@ -41,9 +41,7 @@ class TradeServiceTest {
     void prepare() {
         // 实时报价 mock 固定返回 100.0, 成交价确定可断言
         Mockito.when(realTime.fetchPrice(Mockito.anyString())).thenReturn(100.0);
-        // 股票池 mock: 默认空关注池, realQuote 返回固定真实价
-        Mockito.when(pool.watchList()).thenReturn(List.of());
-        Mockito.doNothing().when(pool).ensureDefaultPool(Mockito.anyInt());
+        // 股票池 mock: realQuote 返回固定真实价
         Mockito.when(pool.realQuote(Mockito.anyString())).thenReturn(Map.of(
                 "code", "000001", "name", "平安银行",
                 "price", 11.0, "prevClose", 10.0,
