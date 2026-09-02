@@ -2,7 +2,6 @@ import { DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Card, Input, Modal, Popconfirm, Table, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import PageHeader from '../components/PageHeader'
 import type { ApiResponse, Quote } from '../types'
@@ -16,7 +15,6 @@ export default function QuotesPage() {
   const [open, setOpen] = useState(false)
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState<SearchStock[]>([])
-  const navigate = useNavigate()
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
@@ -87,7 +85,7 @@ export default function QuotesPage() {
     <>
       <PageHeader
         title="行情中心"
-        description="行情每 5 秒自动刷新，点击股票可直接交易"
+        description="行情每 5 秒自动刷新"
         extra={
           <span>
             <Button icon={<PlusOutlined />} type="primary" onClick={() => setOpen(true)} style={{ marginRight: 8 }}>添加股票</Button>
@@ -96,7 +94,7 @@ export default function QuotesPage() {
         }
       />
       <Card bordered={false}>
-        <Table rowKey="code" columns={columns} dataSource={quotes} loading={loading} pagination={{ pageSize: 15, showSizeChanger: true }} onRow={(row) => ({ onClick: () => navigate(`/trade?code=${encodeURIComponent(row.code)}`), className: 'clickable-row' })} scroll={{ x: 800 }} />
+        <Table rowKey="code" columns={columns} dataSource={quotes} loading={loading} pagination={{ pageSize: 15, showSizeChanger: true }} scroll={{ x: 800 }} />
       </Card>
 
       <Modal title="添加股票" open={open} onCancel={() => setOpen(false)} footer={null} width={560}>
