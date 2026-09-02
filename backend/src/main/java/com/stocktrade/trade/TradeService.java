@@ -2,6 +2,7 @@ package com.stocktrade.trade;
 
 import com.stocktrade.auth.AuthService;
 import com.stocktrade.common.BusinessException;
+import com.stocktrade.stock.RealTimeQuoteService;
 import com.stocktrade.stock.StockQuote;
 import com.stocktrade.stock.StockService;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -16,28 +17,34 @@ import java.util.Map;
 public class TradeService {
     private final JdbcTemplate jdbc;
     private final StockService stocks;
-    public TradeService(JdbcTemplate jdbc, StockService stocks) { this.jdbc = jdbc; this.stocks = stocks; }
+    private final RealTimeQuoteService realTime;
+    public TradeService(JdbcTemplate jdbc, StockService stocks, RealTimeQuoteService realTime) {
+        this.jdbc = jdbc; this.stocks = stocks; this.realTime = realTime;
+    }
 
     @Transactional
     public Map<String, Object> execute(long userId, String code, String side, Integer quantity, String source) {
         if (quantity == null || quantity < 1) throw BusinessException.badRequest("交易数量必须为正整数");
         if (!"buy".equals(side) && !"sell".equals(side)) throw BusinessException.badRequest("交易方向只能是buy或sell");
         StockQuote quote = stocks.get(code);
-        double amount = quote.price() * quantity;
-        if ("buy".equals(side)) buy(userId, quote, quantity, amount);
-        else sell(userId, quote, quantity, amount);
+        // 成交价优先用真实实时价; 实时接口失败时降级回本地模拟价
+        double execPrice = realTime.fetchPrice(code);
+        if (execPrice <= 0) execPrice = quote.price();
+        double amount = execPrice * quantity;
+        if ("buy".equals(side)) buy(userId, quote, quantity, amount, execPrice);
+        else sell(userId, quote, quantity, amount, execPrice);
         String now = AuthService.now();
         jdbc.update("INSERT INTO orders(user_id,code,side,price,quantity,amount,status,source,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
-                userId, quote.code(), side, quote.price(), quantity, amount, "SUCCESS", source, now);
+                userId, quote.code(), side, execPrice, quantity, amount, "SUCCESS", source, now);
         Long id = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", id); result.put("code", quote.code()); result.put("side", side);
-        result.put("price", quote.price()); result.put("quantity", quantity); result.put("amount", amount);
+        result.put("price", execPrice); result.put("quantity", quantity); result.put("amount", amount);
         result.put("status", "SUCCESS"); result.put("source", source); result.put("createdAt", now);
         return result;
     }
 
-    private void buy(long userId, StockQuote quote, int quantity, double amount) {
+    private void buy(long userId, StockQuote quote, int quantity, double amount, double execPrice) {
         Double balance = balance(userId);
         if (balance + 1e-8 < amount) throw BusinessException.badRequest("可用资金不足");
         jdbc.update("UPDATE users SET balance=balance-? WHERE id=?", amount, userId);
@@ -45,7 +52,7 @@ public class TradeService {
                 (rs, n) -> new Position(rs.getInt(1), rs.getDouble(2)), userId, quote.code());
         if (positions.isEmpty()) {
             jdbc.update("INSERT INTO positions(user_id,code,quantity,avg_cost,updated_at) VALUES(?,?,?,?,?)",
-                    userId, quote.code(), quantity, quote.price(), AuthService.now());
+                    userId, quote.code(), quantity, execPrice, AuthService.now());
         } else {
             Position old = positions.get(0);
             int total = old.quantity() + quantity;
@@ -55,7 +62,7 @@ public class TradeService {
         }
     }
 
-    private void sell(long userId, StockQuote quote, int quantity, double amount) {
+    private void sell(long userId, StockQuote quote, int quantity, double amount, double execPrice) {
         var held = jdbc.query("SELECT quantity FROM positions WHERE user_id=? AND code=?",
                 (rs, n) -> rs.getInt(1), userId, quote.code());
         if (held.isEmpty() || held.get(0) < quantity) throw BusinessException.badRequest("持仓不足");
