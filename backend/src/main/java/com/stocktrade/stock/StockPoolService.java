@@ -188,4 +188,194 @@ public class StockPoolService {
         java.util.Collections.reverse(rows);
         return rows;
     }
+
+    /** 股票详情页聚合数据 */
+    public Map<String, Object> stockDetail(String code) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("code", code);
+        result.put("name", stockName(code));
+        result.put("valuation", valuation(code, 30));
+        result.put("moneyflow", moneyflow(code, 20));
+        result.put("holder", holderNum(code));
+        result.put("margin", margin(code, 20));
+        result.put("consensus", consensus(code, 5));
+        result.put("northbound", northbound(code));
+        result.put("forecast", forecast(code, 20));
+        result.put("lhb", lhb(code, 20));
+        return result;
+    }
+
+    /** 估值数据: 最近 limit 期, 按日期倒序 */
+    public List<Map<String, Object>> valuation(String code, int limit) {
+        try {
+            return astock.query(
+                    "SELECT trade_date,pe_ttm,pb,ps_ttm,total_mv,circ_mv,div_yield FROM valuation WHERE sec_code=? ORDER BY trade_date DESC LIMIT ?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("tradeDate", rs.getString("trade_date"));
+                        m.put("peTtm", rs.getDouble("pe_ttm"));
+                        m.put("pb", rs.getDouble("pb"));
+                        m.put("psTtm", rs.getDouble("ps_ttm"));
+                        m.put("totalMv", rs.getDouble("total_mv"));
+                        m.put("circMv", rs.getDouble("circ_mv"));
+                        m.put("divYield", rs.getDouble("div_yield"));
+                        return m;
+                    }, code, limit);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 资金流向: 最近 limit 条, 按日期倒序 */
+    public List<Map<String, Object>> moneyflow(String code, int limit) {
+        try {
+            return astock.query(
+                    "SELECT trade_date,main_net,super_net,big_net,mid_net,small_net FROM moneyflow WHERE sec_code=? ORDER BY trade_date DESC LIMIT ?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("tradeDate", rs.getString("trade_date"));
+                        m.put("mainNet", rs.getDouble("main_net"));
+                        m.put("superNet", rs.getDouble("super_net"));
+                        m.put("bigNet", rs.getDouble("big_net"));
+                        m.put("midNet", rs.getDouble("mid_net"));
+                        m.put("smallNet", rs.getDouble("small_net"));
+                        return m;
+                    }, code, limit);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 股东户数: 全部季度数据 */
+    public List<Map<String, Object>> holderNum(String code) {
+        try {
+            return astock.query(
+                    "SELECT end_date,holder_num,holder_num_chg,avg_hold FROM holder_num WHERE sec_code=? ORDER BY end_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("endDate", rs.getString("end_date"));
+                        m.put("holderNum", rs.getDouble("holder_num"));
+                        m.put("holderNumChg", rs.getDouble("holder_num_chg"));
+                        m.put("avgHold", rs.getDouble("avg_hold"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 两融数据: 最近 limit 条, 按日期倒序 */
+    public List<Map<String, Object>> margin(String code, int limit) {
+        try {
+            return astock.query(
+                    "SELECT trade_date,rz_balance,rq_volume,rzrq_balance,rq_balance,rq_mcl,rzrq_chg FROM margin WHERE sec_code=? ORDER BY trade_date DESC LIMIT ?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("tradeDate", rs.getString("trade_date"));
+                        m.put("rzBalance", rs.getDouble("rz_balance"));
+                        m.put("rqVolume", rs.getDouble("rq_volume"));
+                        m.put("rzrqBalance", rs.getDouble("rzrq_balance"));
+                        m.put("rqBalance", rs.getDouble("rq_balance"));
+                        m.put("rqMcl", rs.getDouble("rq_mcl"));
+                        m.put("rzrqChg", rs.getDouble("rzrq_chg"));
+                        return m;
+                    }, code, limit);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 一致预期: 最近 limit 条 */
+    public List<Map<String, Object>> consensus(String code, int limit) {
+        try {
+            return astock.query(
+                    "SELECT sec_name,rating_org_num,rating_buy,rating_add,rating_neutral,rating_reduce,rating_sale,eps1,year1,eps2,year2,eps3,year3,eps4,year4,aimprice_max,aimprice_min,fetch_date FROM consensus WHERE sec_code=? ORDER BY fetch_date DESC LIMIT ?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("ratingOrgNum", rs.getInt("rating_org_num"));
+                        m.put("ratingBuy", rs.getInt("rating_buy"));
+                        m.put("ratingAdd", rs.getInt("rating_add"));
+                        m.put("ratingNeutral", rs.getInt("rating_neutral"));
+                        m.put("ratingReduce", rs.getInt("rating_reduce"));
+                        m.put("ratingSale", rs.getInt("rating_sale"));
+                        m.put("eps1", rs.getDouble("eps1"));
+                        m.put("year1", rs.getString("year1"));
+                        m.put("eps2", rs.getDouble("eps2"));
+                        m.put("year2", rs.getString("year2"));
+                        m.put("eps3", rs.getDouble("eps3"));
+                        m.put("year3", rs.getString("year3"));
+                        m.put("eps4", rs.getDouble("eps4"));
+                        m.put("year4", rs.getString("year4"));
+                        m.put("aimpriceMax", rs.getDouble("aimprice_max"));
+                        m.put("aimpriceMin", rs.getDouble("aimprice_min"));
+                        m.put("fetchDate", rs.getString("fetch_date"));
+                        return m;
+                    }, code, limit);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 北向持股: 全部季度数据 */
+    public List<Map<String, Object>> northbound(String code) {
+        try {
+            return astock.query(
+                    "SELECT end_date,sec_name,hold_shares,hold_shares_ratio,hold_market_cap,org_quantity,total_shares_ratio,date_type FROM northbound_hold WHERE sec_code=? ORDER BY end_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("endDate", rs.getString("end_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("holdShares", rs.getDouble("hold_shares"));
+                        m.put("holdSharesRatio", rs.getDouble("hold_shares_ratio"));
+                        m.put("holdMarketCap", rs.getDouble("hold_market_cap"));
+                        m.put("orgQuantity", rs.getInt("org_quantity"));
+                        m.put("totalSharesRatio", rs.getDouble("total_shares_ratio"));
+                        m.put("dateType", rs.getString("date_type"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 业绩预告: 最近 limit 条 */
+    public List<Map<String, Object>> forecast(String code, int limit) {
+        try {
+            return astock.query(
+                    "SELECT report_date,notice_date,sec_name,fc_type,fc_value,yoy FROM forecast WHERE sec_code=? ORDER BY notice_date DESC LIMIT ?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("reportDate", rs.getString("report_date"));
+                        m.put("noticeDate", rs.getString("notice_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("fcType", rs.getString("fc_type"));
+                        m.put("fcValue", rs.getDouble("fc_value"));
+                        m.put("yoy", rs.getDouble("yoy"));
+                        return m;
+                    }, code, limit);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 龙虎榜: 最近 limit 条 */
+    public List<Map<String, Object>> lhb(String code, int limit) {
+        try {
+            return astock.query(
+                    "SELECT trade_date,sec_name,reason,buy_amt,sell_amt,net_amt FROM lhb WHERE sec_code=? ORDER BY trade_date DESC LIMIT ?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("tradeDate", rs.getString("trade_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("reason", rs.getString("reason"));
+                        m.put("buyAmt", rs.getDouble("buy_amt"));
+                        m.put("sellAmt", rs.getDouble("sell_amt"));
+                        m.put("netAmt", rs.getDouble("net_amt"));
+                        return m;
+                    }, code, limit);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
 }

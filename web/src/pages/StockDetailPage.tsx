@@ -1,11 +1,12 @@
 import { ArrowLeftOutlined } from '@ant-design/icons'
-import { Button, Card, Descriptions, Radio, Space, Spin, Statistic, Typography } from 'antd'
+import { Button, Card, Descriptions, Empty, Radio, Space, Spin, Statistic, Table, Tabs, Tag, Typography } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import * as echarts from 'echarts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api'
 import type { ApiResponse } from '../types'
-import { getData, money, riseColor, signedPct } from '../utils'
+import { bigMoney, getData, money, riseColor, signedPct } from '../utils'
 
 interface QuoteData {
   code: string
@@ -38,8 +39,115 @@ interface KlineData {
   bars: KlineBar[]
 }
 
+interface ValuationItem {
+  tradeDate: string
+  peTtm: number
+  pb: number
+  psTtm: number
+  totalMv: number
+  circMv: number
+  divYield: number
+}
+
+interface MoneyflowItem {
+  tradeDate: string
+  mainNet: number
+  superNet: number
+  bigNet: number
+  midNet: number
+  smallNet: number
+}
+
+interface HolderItem {
+  endDate: string
+  holderNum: number
+  holderNumChg: number
+  avgHold: number
+}
+
+interface MarginItem {
+  tradeDate: string
+  rzBalance: number
+  rqVolume: number
+  rzrqBalance: number
+  rqBalance: number
+  rqMcl: number
+  rzrqChg: number
+}
+
+interface ConsensusItem {
+  secName: string
+  ratingOrgNum: number
+  ratingBuy: number
+  ratingAdd: number
+  ratingNeutral: number
+  ratingReduce: number
+  ratingSale: number
+  eps1: number
+  year1: string
+  eps2: number
+  year2: string
+  eps3: number
+  year3: string
+  eps4: number
+  year4: string
+  aimpriceMax: number
+  aimpriceMin: number
+  fetchDate: string
+}
+
+interface NorthboundItem {
+  endDate: string
+  secName: string
+  holdShares: number
+  holdSharesRatio: number
+  holdMarketCap: number
+  orgQuantity: number
+  totalSharesRatio: number
+  dateType: string
+}
+
+interface ForecastItem {
+  reportDate: string
+  noticeDate: string
+  secName: string
+  fcType: string
+  fcValue: number
+  yoy: number
+}
+
+interface LhbItem {
+  tradeDate: string
+  secName: string
+  reason: string
+  buyAmt: number
+  sellAmt: number
+  netAmt: number
+}
+
+interface DetailData {
+  code: string
+  name: string
+  valuation: ValuationItem[]
+  moneyflow: MoneyflowItem[]
+  holder: HolderItem[]
+  margin: MarginItem[]
+  consensus: ConsensusItem[]
+  northbound: NorthboundItem[]
+  forecast: ForecastItem[]
+  lhb: LhbItem[]
+}
+
 const UP_COLOR = '#ef232a'
 const DOWN_COLOR = '#14b143'
+
+const fcTypeColors: Record<string, string> = {
+  '预增': 'red', '略增': 'red', '续盈': 'orange',
+  '预减': 'green', '略减': 'green',
+  '扭亏': 'orange', '减亏': 'blue',
+  '首亏': 'green', '增亏': 'green',
+  '不确定': 'default',
+}
 
 export default function StockDetailPage() {
   const { code } = useParams<{ code: string }>()
@@ -48,10 +156,17 @@ export default function StockDetailPage() {
   const [klineType, setKlineType] = useState<'day' | 'min5'>('day')
   const [klineData, setKlineData] = useState<KlineData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [detail, setDetail] = useState<DetailData | null>(null)
   const klineChartRef = useRef<HTMLDivElement>(null)
   const timeChartRef = useRef<HTMLDivElement>(null)
   const klineChartInstance = useRef<echarts.ECharts | null>(null)
   const timeChartInstance = useRef<echarts.ECharts | null>(null)
+  const peChartRef = useRef<HTMLDivElement>(null)
+  const moneyflowChartRef = useRef<HTMLDivElement>(null)
+  const ratingChartRef = useRef<HTMLDivElement>(null)
+  const peChartInstance = useRef<echarts.ECharts | null>(null)
+  const moneyflowChartInstance = useRef<echarts.ECharts | null>(null)
+  const ratingChartInstance = useRef<echarts.ECharts | null>(null)
 
   const loadQuote = useCallback(async () => {
     if (!code) return
@@ -71,10 +186,19 @@ export default function StockDetailPage() {
     } catch { /* ignore */ }
   }, [code])
 
+  const loadDetail = useCallback(async () => {
+    if (!code) return
+    try {
+      const { data } = await api.get<ApiResponse<DetailData>>(`/stocks/detail/${code}`)
+      const result = getData(data)
+      if (result) setDetail(result)
+    } catch { /* ignore */ }
+  }, [code])
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([loadQuote(), loadKline(klineType)]).finally(() => setLoading(false))
-  }, [loadQuote, loadKline, klineType])
+    Promise.all([loadQuote(), loadKline(klineType), loadDetail()]).finally(() => setLoading(false))
+  }, [loadQuote, loadKline, loadDetail, klineType])
 
   useEffect(() => {
     const timer = window.setInterval(() => { void loadQuote() }, 5000)
@@ -160,7 +284,6 @@ export default function StockDetailPage() {
   // 分时图渲染
   useEffect(() => {
     if (!timeChartRef.current || !klineData || klineData.bars.length === 0) return
-    // 分时图用 min5 数据; 如果当前是 day 则也加载 min5 来画分时
     if (klineType !== 'min5') return
 
     if (!timeChartInstance.current) {
@@ -168,7 +291,6 @@ export default function StockDetailPage() {
     }
     const chart = timeChartInstance.current
     const bars = klineData.bars
-    // 取当日数据
     const lastDate = bars.length > 0 ? bars[bars.length - 1].time.substring(0, 10) : ''
     const todayBars = bars.filter(b => b.time.startsWith(lastDate))
     if (todayBars.length === 0) return
@@ -345,21 +467,247 @@ export default function StockDetailPage() {
     return () => { cancelled = true }
   }, [klineType, code, quote])
 
+  // PE 历史趋势图
+  useEffect(() => {
+    if (!peChartRef.current || !detail || detail.valuation.length === 0) return
+    if (!peChartInstance.current) {
+      peChartInstance.current = echarts.init(peChartRef.current)
+    }
+    const chart = peChartInstance.current
+    const data = [...detail.valuation].reverse()
+    chart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 50, right: 20, top: 20, bottom: 30 },
+      xAxis: { type: 'category', data: data.map(d => d.tradeDate), axisLabel: { fontSize: 10 } },
+      yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { type: 'dashed' } } },
+      series: [{
+        type: 'line', data: data.map(d => d.peTtm), smooth: true, symbol: 'none',
+        lineStyle: { color: '#1677ff', width: 1.5 },
+        areaStyle: { color: 'rgba(22,119,255,0.08)' },
+      }],
+    }, true)
+  }, [detail])
+
+  // 资金流向柱状图
+  useEffect(() => {
+    if (!moneyflowChartRef.current || !detail || detail.moneyflow.length === 0) return
+    if (!moneyflowChartInstance.current) {
+      moneyflowChartInstance.current = echarts.init(moneyflowChartRef.current)
+    }
+    const chart = moneyflowChartInstance.current
+    const data = [...detail.moneyflow].reverse()
+    chart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['主力', '超大单', '大单', '中单', '小单'], bottom: 0, textStyle: { fontSize: 11 } },
+      grid: { left: 60, right: 20, top: 10, bottom: 40 },
+      xAxis: { type: 'category', data: data.map(d => d.tradeDate), axisLabel: { fontSize: 10 } },
+      yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { type: 'dashed' } }, axisLabel: { formatter: (v: number) => bigMoney(v) } },
+      series: [
+        { name: '主力', type: 'bar', stack: 'flow', data: data.map(d => d.mainNet), itemStyle: { color: '#1677ff' } },
+        { name: '超大单', type: 'bar', stack: 'detail', data: data.map(d => d.superNet), itemStyle: { color: '#f5222d' } },
+        { name: '大单', type: 'bar', stack: 'detail', data: data.map(d => d.bigNet), itemStyle: { color: '#fa8c16' } },
+        { name: '中单', type: 'bar', stack: 'detail', data: data.map(d => d.midNet), itemStyle: { color: '#faad14' } },
+        { name: '小单', type: 'bar', stack: 'detail', data: data.map(d => d.smallNet), itemStyle: { color: '#52c41a' } },
+      ],
+    }, true)
+  }, [detail])
+
+  // 一致预期评级分布图
+  useEffect(() => {
+    if (!ratingChartRef.current || !detail || detail.consensus.length === 0) return
+    if (!ratingChartInstance.current) {
+      ratingChartInstance.current = echarts.init(ratingChartRef.current)
+    }
+    const chart = ratingChartInstance.current
+    const c = detail.consensus[0]
+    chart.setOption({
+      tooltip: { trigger: 'item' },
+      legend: { bottom: 0, textStyle: { fontSize: 11 } },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '65%'],
+        center: ['50%', '45%'],
+        label: { formatter: '{b}: {c}家' },
+        data: [
+          { value: c.ratingBuy, name: '买入', itemStyle: { color: '#f5222d' } },
+          { value: c.ratingAdd, name: '增持', itemStyle: { color: '#fa8c16' } },
+          { value: c.ratingNeutral, name: '中性', itemStyle: { color: '#1677ff' } },
+          { value: c.ratingReduce, name: '减持', itemStyle: { color: '#52c41a' } },
+          { value: c.ratingSale, name: '卖出', itemStyle: { color: '#8c8c8c' } },
+        ].filter(d => d.value > 0),
+      }],
+    }, true)
+  }, [detail])
+
   // resize
   useEffect(() => {
     const handleResize = () => {
       klineChartInstance.current?.resize()
       timeChartInstance.current?.resize()
+      peChartInstance.current?.resize()
+      moneyflowChartInstance.current?.resize()
+      ratingChartInstance.current?.resize()
     }
     window.addEventListener('resize', handleResize)
     return () => {
       window.removeEventListener('resize', handleResize)
       klineChartInstance.current?.dispose()
       timeChartInstance.current?.dispose()
+      peChartInstance.current?.dispose()
+      moneyflowChartInstance.current?.dispose()
+      ratingChartInstance.current?.dispose()
     }
   }, [])
 
   const changeVal = quote?.change ?? 0
+
+  // ---- Tab 表格列定义 ----
+  const valuationColumns: ColumnsType<ValuationItem> = [
+    { title: '日期', dataIndex: 'tradeDate', width: 110 },
+    { title: 'PE(TTM)', dataIndex: 'peTtm', render: (v: number) => v?.toFixed(2) },
+    { title: 'PB', dataIndex: 'pb', render: (v: number) => v?.toFixed(2) },
+    { title: 'PS(TTM)', dataIndex: 'psTtm', render: (v: number) => v?.toFixed(2) },
+    { title: '总市值', dataIndex: 'totalMv', render: (v: number) => bigMoney(v) },
+    { title: '流通市值', dataIndex: 'circMv', render: (v: number) => bigMoney(v) },
+    { title: '股息率(%)', dataIndex: 'divYield', render: (v: number) => v?.toFixed(2) },
+  ]
+
+  const moneyflowColumns: ColumnsType<MoneyflowItem> = [
+    { title: '日期', dataIndex: 'tradeDate', width: 110 },
+    { title: '主力净流入', dataIndex: 'mainNet', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+    { title: '超大单净流入', dataIndex: 'superNet', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+    { title: '大单净流入', dataIndex: 'bigNet', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+    { title: '中单净流入', dataIndex: 'midNet', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+    { title: '小单净流入', dataIndex: 'smallNet', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+  ]
+
+  const holderColumns: ColumnsType<HolderItem> = [
+    { title: '日期', dataIndex: 'endDate', width: 110 },
+    { title: '股东户数(户)', dataIndex: 'holderNum', render: (v: number) => Number(v).toLocaleString() },
+    { title: '变动(%)', dataIndex: 'holderNumChg', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
+    { title: '户均持股(股)', dataIndex: 'avgHold', render: (v: number) => Number(v).toLocaleString() },
+  ]
+
+  const marginColumns: ColumnsType<MarginItem> = [
+    { title: '日期', dataIndex: 'tradeDate', width: 110 },
+    { title: '融资融券余额', dataIndex: 'rzrqBalance', render: (v: number) => bigMoney(v) },
+    { title: '融资余额', dataIndex: 'rzBalance', render: (v: number) => bigMoney(v) },
+    { title: '融券余额', dataIndex: 'rqBalance', render: (v: number) => bigMoney(v) },
+    { title: '涨跌幅(%)', dataIndex: 'rzrqChg', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
+  ]
+
+  const northboundColumns: ColumnsType<NorthboundItem> = [
+    { title: '日期', dataIndex: 'endDate', width: 110 },
+    { title: '持股(万股)', dataIndex: 'holdShares', render: (v: number) => (v / 1e4).toFixed(2) },
+    { title: '持股占比(%)', dataIndex: 'holdSharesRatio', render: (v: number) => v?.toFixed(2) },
+    { title: '持股市值', dataIndex: 'holdMarketCap', render: (v: number) => bigMoney(v) },
+    { title: '占总股本(%)', dataIndex: 'totalSharesRatio', render: (v: number) => v?.toFixed(2) },
+    { title: '机构数', dataIndex: 'orgQuantity' },
+  ]
+
+  const forecastColumns: ColumnsType<ForecastItem> = [
+    { title: '报告期', dataIndex: 'reportDate', width: 110 },
+    { title: '公告日', dataIndex: 'noticeDate', width: 110 },
+    { title: '类型', dataIndex: 'fcType', render: (v: string) => <Tag color={fcTypeColors[v] || 'default'}>{v}</Tag> },
+    { title: '预测值', dataIndex: 'fcValue', render: (v: number) => v?.toFixed(2) },
+    { title: '同比(%)', dataIndex: 'yoy', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
+  ]
+
+  const lhbColumns: ColumnsType<LhbItem> = [
+    { title: '日期', dataIndex: 'tradeDate', width: 110 },
+    { title: '上榜原因', dataIndex: 'reason', ellipsis: true },
+    { title: '买入(万)', dataIndex: 'buyAmt', render: (v: number) => bigMoney(v) },
+    { title: '卖出(万)', dataIndex: 'sellAmt', render: (v: number) => bigMoney(v) },
+    { title: '净额(万)', dataIndex: 'netAmt', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+  ]
+
+  const tabItems = [
+    {
+      key: 'valuation',
+      label: '估值',
+      children: detail?.valuation?.length ? (
+        <>
+          <Table<ValuationItem> columns={valuationColumns} dataSource={detail.valuation} rowKey="tradeDate" size="small" pagination={false} scroll={{ x: 700 }} />
+          <div ref={peChartRef} style={{ width: '100%', height: 260, marginTop: 16 }} />
+        </>
+      ) : <Empty description="暂无估值数据" />,
+    },
+    {
+      key: 'moneyflow',
+      label: '资金',
+      children: detail?.moneyflow?.length ? (
+        <>
+          <Table<MoneyflowItem> columns={moneyflowColumns} dataSource={detail.moneyflow} rowKey="tradeDate" size="small" pagination={false} scroll={{ x: 800 }} />
+          <div ref={moneyflowChartRef} style={{ width: '100%', height: 260, marginTop: 16 }} />
+        </>
+      ) : <Empty description="暂无资金流向数据" />,
+    },
+    {
+      key: 'holder',
+      label: '股东',
+      children: detail?.holder?.length ? (
+        <Table<HolderItem> columns={holderColumns} dataSource={detail.holder} rowKey="endDate" size="small" pagination={false} />
+      ) : <Empty description="暂无股东数据" />,
+    },
+    {
+      key: 'margin',
+      label: '两融',
+      children: detail?.margin?.length ? (
+        <Table<MarginItem> columns={marginColumns} dataSource={detail.margin} rowKey="tradeDate" size="small" pagination={false} />
+      ) : <Empty description="暂无两融数据" />,
+    },
+    {
+      key: 'consensus',
+      label: '一致预期',
+      children: detail?.consensus?.length ? (() => {
+        const c = detail.consensus[0]
+        return (
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Descriptions size="small" column={{ xs: 1, sm: 2, md: 3 }} bordered>
+              <Descriptions.Item label="覆盖机构数">{c.ratingOrgNum}</Descriptions.Item>
+              <Descriptions.Item label="目标价区间">{c.aimpriceMin?.toFixed(2)} ~ {c.aimpriceMax?.toFixed(2)}</Descriptions.Item>
+              <Descriptions.Item label="更新日期">{c.fetchDate}</Descriptions.Item>
+            </Descriptions>
+            <Descriptions size="small" column={{ xs: 2, sm: 3, md: 5 }} bordered title="评级分布">
+              <Descriptions.Item label="买入"><span style={{ color: '#f5222d', fontWeight: 600 }}>{c.ratingBuy}</span>家</Descriptions.Item>
+              <Descriptions.Item label="增持"><span style={{ color: '#fa8c16', fontWeight: 600 }}>{c.ratingAdd}</span>家</Descriptions.Item>
+              <Descriptions.Item label="中性"><span style={{ color: '#1677ff', fontWeight: 600 }}>{c.ratingNeutral}</span>家</Descriptions.Item>
+              <Descriptions.Item label="减持"><span style={{ color: '#52c41a', fontWeight: 600 }}>{c.ratingReduce}</span>家</Descriptions.Item>
+              <Descriptions.Item label="卖出"><span style={{ color: '#8c8c8c', fontWeight: 600 }}>{c.ratingSale}</span>家</Descriptions.Item>
+            </Descriptions>
+            <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered title="盈利预测(EPS)">
+              {c.year1 && <Descriptions.Item label={`${c.year1}E EPS`}>{c.eps1?.toFixed(2)}</Descriptions.Item>}
+              {c.year2 && <Descriptions.Item label={`${c.year2}E EPS`}>{c.eps2?.toFixed(2)}</Descriptions.Item>}
+              {c.year3 && <Descriptions.Item label={`${c.year3}E EPS`}>{c.eps3?.toFixed(2)}</Descriptions.Item>}
+              {c.year4 && <Descriptions.Item label={`${c.year4}E EPS`}>{c.eps4?.toFixed(2)}</Descriptions.Item>}
+            </Descriptions>
+            <div ref={ratingChartRef} style={{ width: '100%', height: 280 }} />
+          </Space>
+        )
+      })() : <Empty description="暂无一致预期数据" />,
+    },
+    {
+      key: 'northbound',
+      label: '北向',
+      children: detail?.northbound?.length ? (
+        <Table<NorthboundItem> columns={northboundColumns} dataSource={detail.northbound} rowKey="endDate" size="small" pagination={false} />
+      ) : <Empty description="暂无北向持股数据" />,
+    },
+    {
+      key: 'forecast',
+      label: '财报',
+      children: detail?.forecast?.length ? (
+        <Table<ForecastItem> columns={forecastColumns} dataSource={detail.forecast} rowKey={(r) => `${r.reportDate}-${r.noticeDate}`} size="small" pagination={false} />
+      ) : <Empty description="暂无财报预告数据" />,
+    },
+    {
+      key: 'lhb',
+      label: '重大事件',
+      children: detail?.lhb?.length ? (
+        <Table<LhbItem> columns={lhbColumns} dataSource={detail.lhb} rowKey={(r) => `${r.tradeDate}-${r.reason}`} size="small" pagination={false} />
+      ) : <Empty description="暂无龙虎榜数据" />,
+    },
+  ]
 
   return (
     <Spin spinning={loading}>
@@ -420,6 +768,10 @@ export default function StockDetailPage() {
 
         <Card bordered={false} title="分时图">
           <div ref={timeChartRef} style={{ width: '100%', height: 360 }} />
+        </Card>
+
+        <Card bordered={false}>
+          <Tabs items={tabItems} defaultActiveKey="valuation" />
         </Card>
       </Space>
     </Spin>
