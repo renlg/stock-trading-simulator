@@ -3,6 +3,7 @@ package com.stocktrade.trade;
 import com.stocktrade.auth.AuthService;
 import com.stocktrade.common.BusinessException;
 import com.stocktrade.stock.RealTimeQuoteService;
+import com.stocktrade.stock.StockPoolService;
 import com.stocktrade.stock.StockQuote;
 import com.stocktrade.stock.StockService;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -17,17 +18,19 @@ import java.util.Map;
 public class TradeService {
     private final JdbcTemplate jdbc;
     private final StockService stocks;
+    private final StockPoolService pool;
     private final RealTimeQuoteService realTime;
-    public TradeService(JdbcTemplate jdbc, StockService stocks, RealTimeQuoteService realTime) {
-        this.jdbc = jdbc; this.stocks = stocks; this.realTime = realTime;
+    public TradeService(JdbcTemplate jdbc, StockService stocks, StockPoolService pool, RealTimeQuoteService realTime) {
+        this.jdbc = jdbc; this.stocks = stocks; this.pool = pool; this.realTime = realTime;
     }
 
     @Transactional
     public Map<String, Object> execute(long userId, String code, String side, Integer quantity, String source) {
         if (quantity == null || quantity < 1) throw BusinessException.badRequest("交易数量必须为正整数");
         if (!"buy".equals(side) && !"sell".equals(side)) throw BusinessException.badRequest("交易方向只能是buy或sell");
-        StockQuote quote = stocks.get(code);
-        // 成交价优先用真实实时价; 实时接口失败时降级回本地模拟价
+        // 确保股票在行情池中: 不在则从真实数据源加载
+        StockQuote quote = ensureLoaded(code);
+        // 成交价优先用真实实时价; 实时接口失败时降级回本地行情价
         double execPrice = realTime.fetchPrice(code);
         if (execPrice <= 0) execPrice = quote.price();
         double amount = execPrice * quantity;
@@ -77,6 +80,24 @@ public class TradeService {
         List<Double> values = jdbc.query("SELECT balance FROM users WHERE id=?", (rs, n) -> rs.getDouble(1), userId);
         if (values.isEmpty()) throw BusinessException.notFound("用户不存在");
         return values.get(0);
+    }
+
+    /** 确保股票在内存行情中: 不在则从真实数据源(/opt/a-stock)加载, 支持交易任意A股 */
+    private StockQuote ensureLoaded(String code) {
+        StockQuote quote = stocks.getOrNull(code);
+        if (quote != null) return quote;
+        Map<String, Object> q = pool.realQuote(code);
+        if (q == null) throw BusinessException.notFound("股票不存在或无行情: " + code);
+        String name = (String) q.get("name");
+        double price = ((Number) q.get("price")).doubleValue();
+        double prevClose = ((Number) q.get("prevClose")).doubleValue();
+        double high = ((Number) q.get("high")).doubleValue();
+        double low = ((Number) q.get("low")).doubleValue();
+        StockQuote loaded = new StockQuote(code, name, prevClose, price, high, low, AuthService.now());
+        stocks.put(loaded);
+        // 同时加入关注池, 让行情列表能展示
+        try { pool.addWatch(code); } catch (Exception ignored) {}
+        return loaded;
     }
 
     private record Position(int quantity, double avgCost) {}

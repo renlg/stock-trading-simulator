@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS stocks (
     updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS watch_stocks (
+    code TEXT PRIMARY KEY,
+    name TEXT,
+    added_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS positions (
     user_id INTEGER,
     code TEXT,

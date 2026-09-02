@@ -14,50 +14,49 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * 行情引擎: 从 /opt/a-stock 真实数据(最新分钟线 + 昨日日线)驱动关注池行情。
+ * 不再随机游走 —— price 来自真实分钟线收盘, prev_close 来自真实昨日收盘,
+ * 涨跌幅 = (真实最新价 - 真实昨收) / 真实昨收, 不会出现 18% 式荒谬涨幅。
+ * 每 tick 重读一次库, 盘中工作流26每5分钟更新分钟线, 引擎下一tick即可拿到最新价。
+ */
 @Component
 public class QuoteEngine {
     private static final Logger log = LoggerFactory.getLogger(QuoteEngine.class);
-    private static final List<Seed> SEEDS = List.of(
-            new Seed("600519", "贵州茅台", 1700.00), new Seed("000001", "平安银行", 10.50),
-            new Seed("600036", "招商银行", 34.20), new Seed("601318", "中国平安", 45.60),
-            new Seed("000858", "五粮液", 138.00), new Seed("600276", "恒瑞医药", 43.50),
-            new Seed("000333", "美的集团", 62.80), new Seed("600900", "长江电力", 25.30),
-            new Seed("601398", "工商银行", 5.40), new Seed("601857", "中国石油", 9.20),
-            new Seed("600030", "中信证券", 19.80), new Seed("002594", "比亚迪", 225.00),
-            new Seed("300750", "宁德时代", 190.00), new Seed("601012", "隆基绿能", 20.10),
-            new Seed("600887", "伊利股份", 27.60), new Seed("000651", "格力电器", 38.40),
-            new Seed("601088", "中国神华", 39.50), new Seed("600028", "中国石化", 6.30),
-            new Seed("601166", "兴业银行", 16.80), new Seed("600050", "中国联通", 4.70),
-            new Seed("002415", "海康威视", 31.20), new Seed("600309", "万华化学", 82.00),
-            new Seed("603288", "海天味业", 38.60), new Seed("000725", "京东方A", 4.10)
-    );
 
     private final JdbcTemplate jdbc;
     private final StockService stocks;
+    private final StockPoolService pool;
     private final ObjectProvider<ConditionService> conditions;
     private final int persistTicks;
     private final AtomicInteger ticks = new AtomicInteger();
 
-    public QuoteEngine(JdbcTemplate jdbc, StockService stocks, ObjectProvider<ConditionService> conditions,
+    public QuoteEngine(JdbcTemplate jdbc, StockService stocks, StockPoolService pool,
+                       ObjectProvider<ConditionService> conditions,
                        @Value("${stock.quote.persist-ticks:30}") int persistTicks) {
         this.jdbc = jdbc;
         this.stocks = stocks;
+        this.pool = pool;
         this.conditions = conditions;
         this.persistTicks = persistTicks;
     }
 
     @PostConstruct
     public void initialize() {
-        String now = AuthService.now();
-        for (Seed seed : SEEDS) {
-            jdbc.update("INSERT OR IGNORE INTO stocks(code,name,prev_close,price,high,low,updated_at) VALUES(?,?,?,?,?,?,?)",
-                    seed.code(), seed.name(), seed.price(), seed.price(), seed.price(), seed.price(), now);
-        }
+        // 默认精选池: 空时从A股市场自动填充(可按配置覆盖数量)
+        int defaultPool = 30;
+        try {
+            defaultPool = Integer.parseInt(System.getProperty("stock.pool.size", "30"));
+        } catch (NumberFormatException ignored) {}
+        pool.ensureDefaultPool(defaultPool);
+
+        // 用真实数据初始化内存行情
+        refreshFromRealData();
         stocks.reload();
-        log.info("模拟行情引擎已载入{}只股票", stocks.all().size());
+        log.info("行情引擎已载入{}只真实行情(来源: /opt/a-stock)", stocks.all().size());
     }
 
     @Scheduled(fixedDelayString = "${stock.quote.interval-ms:2000}")
@@ -66,30 +65,50 @@ public class QuoteEngine {
     }
 
     public void updatePricesOnce() {
-        String now = AuthService.now();
-        for (StockQuote old : stocks.all()) {
-            double factor = 1 + (ThreadLocalRandom.current().nextDouble() - 0.5) * 0.01;
-            double price = round(Math.max(0.01, old.price() * factor));
-            stocks.put(new StockQuote(old.code(), old.name(), old.prevClose(), price,
-                    Math.max(old.high(), price), Math.min(old.low(), price), now));
-        }
+        refreshFromRealData();
         if (ticks.incrementAndGet() % Math.max(1, persistTicks) == 0) persist();
         ConditionService service = conditions.getIfAvailable();
         if (service != null) service.checkAndTrigger();
     }
 
+    /** 从 /opt/a-stock 读关注池每只最新分钟线+昨收, 更新内存行情 */
+    private void refreshFromRealData() {
+        List<Map<String, Object>> watch = pool.watchList();
+        String now = AuthService.now();
+        for (Map<String, Object> w : watch) {
+            String code = (String) w.get("code");
+            String name = (String) w.get("name");
+            try {
+                Map<String, Object> q = pool.realQuote(code);
+                if (q == null) continue; // 无分钟线数据, 跳过
+                double price = ((Number) q.get("price")).doubleValue();
+                double prevClose = ((Number) q.get("prevClose")).doubleValue();
+                double high = ((Number) q.get("high")).doubleValue();
+                double low = ((Number) q.get("low")).doubleValue();
+                // 取引擎内已有 high/low 做历史最高/最低(分钟线 high/low 是当根K线内的)
+                StockQuote old = stocks.getOrNull(code);
+                double histHigh = old != null ? Math.max(old.high(), high) : high;
+                double histLow = old != null ? Math.min(old.low(), low) : low;
+                stocks.put(new StockQuote(code, name, prevClose, price, histHigh, histLow, now));
+            } catch (Exception e) {
+                log.warn("刷新行情失败 code={}: {}", code, e.getMessage());
+            }
+        }
+    }
+
     public void persist() {
         List<StockQuote> snapshot = stocks.all();
-        jdbc.batchUpdate("UPDATE stocks SET price=?,high=?,low=?,updated_at=? WHERE code=?", snapshot,
+        if (snapshot.isEmpty()) return;
+        jdbc.batchUpdate("INSERT OR REPLACE INTO stocks(code,name,prev_close,price,high,low,updated_at) VALUES(?,?,?,?,?,?,?)", snapshot,
                 snapshot.size(), (ps, quote) -> {
-                    ps.setDouble(1, quote.price()); ps.setDouble(2, quote.high());
-                    ps.setDouble(3, quote.low()); ps.setString(4, quote.updatedAt()); ps.setString(5, quote.code());
+                    ps.setString(1, quote.code()); ps.setString(2, quote.name());
+                    ps.setDouble(3, quote.prevClose()); ps.setDouble(4, quote.price());
+                    ps.setDouble(5, quote.high()); ps.setDouble(6, quote.low());
+                    ps.setString(7, quote.updatedAt());
                 });
     }
 
     private static double round(double value) {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
-
-    private record Seed(String code, String name, double price) {}
 }

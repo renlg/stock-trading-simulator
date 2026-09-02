@@ -1,23 +1,26 @@
 package com.stocktrade.condition;
 
+import com.stocktrade.stock.QuoteEngine;
 import com.stocktrade.stock.StockQuote;
 import com.stocktrade.stock.StockService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:sqlite:./target/condition-test.db",
+        "spring.datasource.url=jdbc:sqlite:/Users/renlinggao/workspace/stock-trading-simulator/backend/target/condition-test.db",
         "stock.quote.interval-ms=3600000"
 })
 class ConditionServiceTest {
     @Autowired ConditionService conditions;
     @Autowired StockService stocks;
     @Autowired JdbcTemplate jdbc;
+    @MockBean QuoteEngine quoteEngine; // 覆盖真实引擎, 避免真实初始化连 /opt/a-stock
     private long userId;
 
     @BeforeEach
@@ -25,9 +28,13 @@ class ConditionServiceTest {
         jdbc.update("DELETE FROM orders"); jdbc.update("DELETE FROM positions");
         jdbc.update("DELETE FROM conditions"); jdbc.update("DELETE FROM auth_tokens");
         jdbc.update("DELETE FROM api_keys"); jdbc.update("DELETE FROM users");
+        jdbc.update("DELETE FROM stocks");
         jdbc.update("INSERT INTO users(username,password_hash,balance,created_at) VALUES('条件测试','x',1000000,'now')");
         userId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
+        // 预置 000001/600519 到内存行情(QuoteEngine 被 mock, 不会自动填充)
         stocks.reload();
+        stocks.put(new StockQuote("000001", "平安银行", 10.0, 11.0, 11.5, 10.5, "now"));
+        stocks.put(new StockQuote("600519", "贵州茅台", 1299.56, 1297.5, 1300.0, 1290.0, "now"));
     }
 
     @Test

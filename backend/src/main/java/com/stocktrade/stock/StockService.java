@@ -33,6 +33,10 @@ public class StockService {
         return quote;
     }
 
+    public StockQuote getOrNull(String code) {
+        return code == null ? null : quotes.get(code.trim());
+    }
+
     public List<StockQuote> all() {
         return quotes.values().stream().sorted(Comparator.comparing(StockQuote::code)).toList();
     }
