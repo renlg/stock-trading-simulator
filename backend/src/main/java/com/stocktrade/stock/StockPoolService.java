@@ -142,4 +142,50 @@ public class StockPoolService {
         }
         return result;
     }
+
+    /** 查询股票名称 */
+    public String stockName(String code) {
+        List<String> names = astock.query("SELECT sec_name FROM stock_pool WHERE sec_code=?",
+                (rs, n) -> rs.getString(1), code);
+        return names.isEmpty() ? code : names.get(0);
+    }
+
+    /** 日线K线: 取最近 limit 根, 按时间正序返回 */
+    public List<Map<String, Object>> klineDaily(String code, int limit) {
+        List<Map<String, Object>> rows = astock.query(
+                "SELECT trade_date,open,close,high,low,volume,amount,pct_chg FROM kline_daily WHERE sec_code=? ORDER BY trade_date DESC LIMIT ?",
+                (rs, n) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("time", rs.getString("trade_date"));
+                    m.put("open", rs.getDouble("open"));
+                    m.put("close", rs.getDouble("close"));
+                    m.put("high", rs.getDouble("high"));
+                    m.put("low", rs.getDouble("low"));
+                    m.put("volume", rs.getDouble("volume"));
+                    m.put("amount", rs.getDouble("amount"));
+                    m.put("pctChg", rs.getDouble("pct_chg"));
+                    return m;
+                }, code, limit);
+        java.util.Collections.reverse(rows);
+        return rows;
+    }
+
+    /** 5分钟K线: 取最近 limit 根, 按时间正序返回 */
+    public List<Map<String, Object>> klineMin5(String code, int limit) {
+        List<Map<String, Object>> rows = astock.query(
+                "SELECT trade_time,open,close,high,low,volume,amount FROM kline_min5 WHERE sec_code=? ORDER BY trade_time DESC LIMIT ?",
+                (rs, n) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("time", rs.getString("trade_time"));
+                    m.put("open", rs.getDouble("open"));
+                    m.put("close", rs.getDouble("close"));
+                    m.put("high", rs.getDouble("high"));
+                    m.put("low", rs.getDouble("low"));
+                    m.put("volume", rs.getDouble("volume"));
+                    m.put("amount", rs.getDouble("amount"));
+                    return m;
+                }, code, limit);
+        java.util.Collections.reverse(rows);
+        return rows;
+    }
 }

@@ -2,6 +2,7 @@ import { DeleteOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Button, Card, Input, Modal, Popconfirm, Table, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../api'
 import PageHeader from '../components/PageHeader'
 import type { ApiResponse, Quote } from '../types'
@@ -65,7 +66,7 @@ export default function QuotesPage() {
 
   const columns: ColumnsType<Quote> = [
     { title: '股票代码', dataIndex: 'code', width: 110, render: (v: string) => <Typography.Text strong>{v}</Typography.Text> },
-    { title: '股票名称', dataIndex: 'name', width: 120 },
+    { title: '股票名称', dataIndex: 'name', width: 120, render: (v: string, row) => <Link to={`/stock/${row.code}`}>{v}</Link> },
     { title: '当前价格', dataIndex: 'price', align: 'right', render: (v: number, row) => <span style={{ color: riseColor(row.change) }}>{money(v)}</span> },
     { title: '涨跌额', dataIndex: 'change', align: 'right', render: (v: number) => <span style={{ color: riseColor(v) }}>{v > 0 ? '+' : ''}{v.toFixed(2)}</span> },
     { title: '涨跌幅', dataIndex: 'changePct', align: 'right', render: (v: number) => <span style={{ color: riseColor(v), fontWeight: 600 }}>{signedPct(v)}</span> },

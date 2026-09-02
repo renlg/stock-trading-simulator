@@ -62,6 +62,26 @@ public class QuoteController {
         return Result.success(q);
     }
 
+    /** K线数据: type=day|min5, limit 默认120 */
+    @GetMapping("/api/stocks/kline/{code}")
+    public Result<Map<String, Object>> kline(@PathVariable String code,
+                                              @RequestParam(defaultValue = "day") String type,
+                                              @RequestParam(defaultValue = "120") int limit) {
+        String name = pool.stockName(code);
+        List<Map<String, Object>> bars;
+        if ("min5".equals(type)) {
+            bars = pool.klineMin5(code, Math.min(Math.max(limit, 1), 500));
+        } else {
+            bars = pool.klineDaily(code, Math.min(Math.max(limit, 1), 500));
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("code", code);
+        result.put("name", name);
+        result.put("type", "min5".equals(type) ? "min5" : "day");
+        result.put("bars", bars);
+        return Result.success(result);
+    }
+
     public record WatchRequest(String code) {}
     public record QuoteResponse(String code, String name, double price, double prevClose,
                                 double change, double changePct, double high, double low, String updatedAt) {

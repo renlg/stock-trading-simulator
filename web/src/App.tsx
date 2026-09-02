@@ -9,6 +9,7 @@ import ConditionsPage from './pages/ConditionsPage'
 import AccountPage from './pages/AccountPage'
 import OrdersPage from './pages/OrdersPage'
 import ApiKeyPage from './pages/ApiKeyPage'
+import StockDetailPage from './pages/StockDetailPage'
 
 function RequireAuth() {
   return localStorage.getItem('token') ? <MainLayout /> : <Navigate to="/login" replace />
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/quotes" element={<QuotesPage />} />
+          <Route path="/stock/:code" element={<StockDetailPage />} />
           <Route path="/trade" element={<TradePage />} />
           <Route path="/positions" element={<PositionsPage />} />
           <Route path="/conditions" element={<ConditionsPage />} />
