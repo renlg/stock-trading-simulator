@@ -15,7 +15,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:sqlite:/Users/renlinggao/workspace/stock-trading-simulator/backend/target/quote-test.db",
         "stock.quote.interval-ms=3600000",
-        "stock.quote.persist-ticks=1"
+        "stock.quote.persist-ticks=1",
+        "newsfeed.base-url=http://127.0.0.1:8891",
+        "newsfeed.username=admin",
+        "newsfeed.password=admin123"
 })
 class QuoteEngineTest {
     @Autowired QuoteEngine engine;

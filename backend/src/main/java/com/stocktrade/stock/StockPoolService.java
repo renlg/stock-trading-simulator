@@ -21,10 +21,12 @@ import java.util.Map;
 public class StockPoolService {
     private final JdbcTemplate jdbc;      // 模拟盘自己的库
     private final JdbcTemplate astock;    // /opt/a-stock 只读库
+    private final NewsFeedClient newsFeed;
 
-    public StockPoolService(JdbcTemplate jdbc, @Qualifier("aStockJdbc") JdbcTemplate astock) {
+    public StockPoolService(JdbcTemplate jdbc, @Qualifier("aStockJdbc") JdbcTemplate astock, NewsFeedClient newsFeed) {
         this.jdbc = jdbc;
         this.astock = astock;
+        this.newsFeed = newsFeed;
     }
 
     /** 搜索全市场, q 匹配代码或名称, limit 上限 */
@@ -200,8 +202,8 @@ public class StockPoolService {
         result.put("margin", margin(code, 20));
         result.put("consensus", consensus(code, 5));
         result.put("northbound", northbound(code));
-        result.put("forecast", forecast(code, 20));
-        result.put("lhb", lhb(code, 20));
+        result.put("financial", newsFeed.financial(code));
+        result.put("events", newsFeed.events(code));
         return result;
     }
 
@@ -334,46 +336,6 @@ public class StockPoolService {
                         m.put("dateType", rs.getString("date_type"));
                         return m;
                     }, code);
-        } catch (Exception e) {
-            return List.of();
-        }
-    }
-
-    /** 业绩预告: 最近 limit 条 */
-    public List<Map<String, Object>> forecast(String code, int limit) {
-        try {
-            return astock.query(
-                    "SELECT report_date,notice_date,sec_name,fc_type,fc_value,yoy FROM forecast WHERE sec_code=? ORDER BY notice_date DESC LIMIT ?",
-                    (rs, n) -> {
-                        Map<String, Object> m = new LinkedHashMap<>();
-                        m.put("reportDate", rs.getString("report_date"));
-                        m.put("noticeDate", rs.getString("notice_date"));
-                        m.put("secName", rs.getString("sec_name"));
-                        m.put("fcType", rs.getString("fc_type"));
-                        m.put("fcValue", rs.getDouble("fc_value"));
-                        m.put("yoy", rs.getDouble("yoy"));
-                        return m;
-                    }, code, limit);
-        } catch (Exception e) {
-            return List.of();
-        }
-    }
-
-    /** 龙虎榜: 最近 limit 条 */
-    public List<Map<String, Object>> lhb(String code, int limit) {
-        try {
-            return astock.query(
-                    "SELECT trade_date,sec_name,reason,buy_amt,sell_amt,net_amt FROM lhb WHERE sec_code=? ORDER BY trade_date DESC LIMIT ?",
-                    (rs, n) -> {
-                        Map<String, Object> m = new LinkedHashMap<>();
-                        m.put("tradeDate", rs.getString("trade_date"));
-                        m.put("secName", rs.getString("sec_name"));
-                        m.put("reason", rs.getString("reason"));
-                        m.put("buyAmt", rs.getDouble("buy_amt"));
-                        m.put("sellAmt", rs.getDouble("sell_amt"));
-                        m.put("netAmt", rs.getDouble("net_amt"));
-                        return m;
-                    }, code, limit);
         } catch (Exception e) {
             return List.of();
         }

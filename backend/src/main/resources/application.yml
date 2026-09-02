@@ -18,6 +18,11 @@ stock:
     interval-ms: 2000
     persist-ticks: 30
 
+newsfeed:
+  base-url: http://127.0.0.1:8891
+  username: admin
+  password: admin123
+
 logging:
   level:
     com.stocktrade: info

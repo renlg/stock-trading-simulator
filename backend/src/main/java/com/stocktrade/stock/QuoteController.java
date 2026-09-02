@@ -82,7 +82,7 @@ public class QuoteController {
         return Result.success(result);
     }
 
-    /** 股票详情页聚合数据: 估值/资金/股东/两融/一致预期/北向/财报/龙虎榜 */
+    /** 股票详情页聚合数据: 估值/资金/股东/两融/一致预期/北向/财报(news-feed)/重大事件(news-feed) */
     @GetMapping("/api/stocks/detail/{code}")
     public Result<Map<String, Object>> detail(@PathVariable String code) {
         return Result.success(pool.stockDetail(code));

@@ -107,22 +107,23 @@ interface NorthboundItem {
   dateType: string
 }
 
-interface ForecastItem {
-  reportDate: string
+interface FinancialItem {
+  reportPeriod: string
+  reportType: string
   noticeDate: string
-  secName: string
-  fcType: string
-  fcValue: number
-  yoy: number
+  totalOperateIncome: number
+  parentNetProfit: number
+  basicEps: number
+  weightAvgRoe: number
+  ystz: number
+  sjltz: number
 }
 
-interface LhbItem {
-  tradeDate: string
-  secName: string
-  reason: string
-  buyAmt: number
-  sellAmt: number
-  netAmt: number
+interface EventsItem {
+  title: string
+  eventDate: string
+  category: string
+  pdfUrl?: string
 }
 
 interface DetailData {
@@ -134,19 +135,17 @@ interface DetailData {
   margin: MarginItem[]
   consensus: ConsensusItem[]
   northbound: NorthboundItem[]
-  forecast: ForecastItem[]
-  lhb: LhbItem[]
+  financial: FinancialItem[]
+  events: EventsItem[]
 }
 
 const UP_COLOR = '#ef232a'
 const DOWN_COLOR = '#14b143'
 
-const fcTypeColors: Record<string, string> = {
-  '预增': 'red', '略增': 'red', '续盈': 'orange',
-  '预减': 'green', '略减': 'green',
-  '扭亏': 'orange', '减亏': 'blue',
-  '首亏': 'green', '增亏': 'green',
-  '不确定': 'default',
+const eventCategoryColors: Record<string, string> = {
+  '业绩预告': 'orange', '股东增减持': 'blue', '分红': 'red',
+  '回购': 'green', '诉讼': 'default', '重大合同': 'purple',
+  '其他': 'default',
 }
 
 export default function StockDetailPage() {
@@ -605,20 +604,23 @@ export default function StockDetailPage() {
     { title: '机构数', dataIndex: 'orgQuantity' },
   ]
 
-  const forecastColumns: ColumnsType<ForecastItem> = [
-    { title: '报告期', dataIndex: 'reportDate', width: 110 },
+  const financialColumns: ColumnsType<FinancialItem> = [
+    { title: '报告期', dataIndex: 'reportPeriod', width: 100 },
+    { title: '类型', dataIndex: 'reportType', width: 80 },
     { title: '公告日', dataIndex: 'noticeDate', width: 110 },
-    { title: '类型', dataIndex: 'fcType', render: (v: string) => <Tag color={fcTypeColors[v] || 'default'}>{v}</Tag> },
-    { title: '预测值', dataIndex: 'fcValue', render: (v: number) => v?.toFixed(2) },
-    { title: '同比(%)', dataIndex: 'yoy', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
+    { title: '营业总收入(亿)', dataIndex: 'totalOperateIncome', render: (v: number) => (v / 1e8).toFixed(2) },
+    { title: '归母净利润(亿)', dataIndex: 'parentNetProfit', render: (v: number) => (v / 1e8).toFixed(2) },
+    { title: '基本EPS', dataIndex: 'basicEps', render: (v: number) => v?.toFixed(2) },
+    { title: 'ROE(%)', dataIndex: 'weightAvgRoe', render: (v: number) => v?.toFixed(2) },
+    { title: '营收同比(%)', dataIndex: 'ystz', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
+    { title: '净利同比(%)', dataIndex: 'sjltz', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
   ]
 
-  const lhbColumns: ColumnsType<LhbItem> = [
-    { title: '日期', dataIndex: 'tradeDate', width: 110 },
-    { title: '上榜原因', dataIndex: 'reason', ellipsis: true },
-    { title: '买入(万)', dataIndex: 'buyAmt', render: (v: number) => bigMoney(v) },
-    { title: '卖出(万)', dataIndex: 'sellAmt', render: (v: number) => bigMoney(v) },
-    { title: '净额(万)', dataIndex: 'netAmt', render: (v: number) => <span style={{ color: riseColor(v) }}>{bigMoney(v)}</span> },
+  const eventsColumns: ColumnsType<EventsItem> = [
+    { title: '日期', dataIndex: 'eventDate', width: 110 },
+    { title: '标题', dataIndex: 'title', ellipsis: true },
+    { title: '分类', dataIndex: 'category', width: 120, render: (v: string) => <Tag color={eventCategoryColors[v] || 'default'}>{v}</Tag> },
+    { title: '公告', width: 100, render: (_: any, record: EventsItem) => record.pdfUrl ? <a href={record.pdfUrl} target="_blank" rel="noopener noreferrer">查看公告</a> : '-' },
   ]
 
   const tabItems = [
@@ -694,18 +696,18 @@ export default function StockDetailPage() {
       ) : <Empty description="暂无北向持股数据" />,
     },
     {
-      key: 'forecast',
+      key: 'financial',
       label: '财报',
-      children: detail?.forecast?.length ? (
-        <Table<ForecastItem> columns={forecastColumns} dataSource={detail.forecast} rowKey={(r) => `${r.reportDate}-${r.noticeDate}`} size="small" pagination={false} />
-      ) : <Empty description="暂无财报预告数据" />,
+      children: detail?.financial?.length ? (
+        <Table<FinancialItem> columns={financialColumns} dataSource={detail.financial} rowKey={(r) => `${r.reportPeriod}-${r.noticeDate}`} size="small" pagination={false} scroll={{ x: 1000 }} />
+      ) : <Empty description="暂无财报数据" />,
     },
     {
-      key: 'lhb',
+      key: 'events',
       label: '重大事件',
-      children: detail?.lhb?.length ? (
-        <Table<LhbItem> columns={lhbColumns} dataSource={detail.lhb} rowKey={(r) => `${r.tradeDate}-${r.reason}`} size="small" pagination={false} />
-      ) : <Empty description="暂无龙虎榜数据" />,
+      children: detail?.events?.length ? (
+        <Table<EventsItem> columns={eventsColumns} dataSource={detail.events} rowKey={(r) => `${r.eventDate}-${r.title}`} size="small" pagination={false} scroll={{ x: 700 }} />
+      ) : <Empty description="暂无重大事件数据" />,
     },
   ]
 
