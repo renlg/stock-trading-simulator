@@ -1,0 +1,19 @@
+# 部署脚本/本地环境/构建产物 不进 git
+deploy.sh
+deploy-local.sh
+*.log
+logs/
+.env
+
+# 后端构建产物
+backend/target/
+backend/data/
+
+# 前端构建产物
+web/node_modules/
+web/dist/
+
+# 数据库
+*.db
+*.mv.db
+data/

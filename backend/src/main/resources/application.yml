@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:sqlite:./data/stock.db
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+stock:
+  initial-balance: ${STOCK_INIT_BALANCE:1000000}
+  token-expire-days: 7
+  quote:
+    enabled: true
+    interval-ms: 2000
+    persist-ticks: 30
+
+logging:
+  level:
+    com.stocktrade: info
