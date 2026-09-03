@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { BrowserRouter } from 'react-router-dom'
 import MainLayout from './components/MainLayout'
@@ -17,6 +18,10 @@ function RequireAuth() {
   return localStorage.getItem('accessToken') ? <MainLayout /> : <Navigate to="/login" replace />
 }
 
+function RequireAdmin({ children }: { children: ReactNode }) {
+  return localStorage.getItem('role') === 'admin' ? <>{children}</> : <Navigate to="/quotes" replace />
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -31,7 +36,7 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/backtest" element={<BacktestPage />} />
-          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/calendar" element={<RequireAdmin><CalendarPage /></RequireAdmin>} />
           <Route path="/admin/users" element={<AccountManagePage />} />
         </Route>
         <Route path="*" element={<Navigate to={localStorage.getItem('accessToken') ? '/quotes' : '/login'} replace />} />

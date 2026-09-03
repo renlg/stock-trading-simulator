@@ -12,7 +12,6 @@ const baseItems = [
   { key: '/account', icon: <BarChartOutlined />, label: '资金统计' },
   { key: '/orders', icon: <OrderedListOutlined />, label: '订单历史' },
   { key: '/backtest', icon: <ExperimentOutlined />, label: '策略回测' },
-  { key: '/calendar', icon: <CalendarOutlined />, label: '交易日历' },
 ]
 
 export default function MainLayout() {
@@ -20,7 +19,7 @@ export default function MainLayout() {
   const navigate = useNavigate()
   const isAdmin = localStorage.getItem('role') === 'admin'
   const items = isAdmin
-    ? [...baseItems, { key: '/admin/users', icon: <SettingOutlined />, label: '账号管理' }]
+    ? [...baseItems, { key: '/calendar', icon: <CalendarOutlined />, label: '交易日历' }, { key: '/admin/users', icon: <SettingOutlined />, label: '账号管理' }]
     : baseItems
 
   const logout = () => {
