@@ -23,8 +23,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/error",
                         "/api/stocks/search", "/api/stocks/quote/*",
                         "/api/stocks/kline/**", "/api/stocks/detail/**",
-                        "/api/backtest/**",
-                        "/api/calendar/**");
-        registry.addInterceptor(adminInterceptor).addPathPatterns("/api/admin/**");
+                        "/api/backtest/**");
+        registry.addInterceptor(adminInterceptor)
+                .addPathPatterns("/api/admin/**")
+                .addPathPatterns("/api/calendar/holidays");
     }
 }
