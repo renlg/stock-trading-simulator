@@ -8,9 +8,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doNothing;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:sqlite:/Users/renlinggao/workspace/stock-trading-simulator/backend/target/condition-test.db",
@@ -23,11 +25,13 @@ class ConditionServiceTest {
     @Autowired ConditionService conditions;
     @Autowired StockService stocks;
     @Autowired JdbcTemplate jdbc;
+    @SpyBean com.stocktrade.trade.TradeService trades;
     @MockBean QuoteEngine quoteEngine; // 覆盖真实引擎, 避免真实初始化连 /opt/a-stock
     private long userId;
 
     @BeforeEach
     void prepare() {
+        doNothing().when(trades).checkTradingSession();
         jdbc.update("DELETE FROM orders"); jdbc.update("DELETE FROM positions");
         jdbc.update("DELETE FROM conditions"); jdbc.update("DELETE FROM auth_tokens");
         jdbc.update("DELETE FROM users");

@@ -74,8 +74,15 @@ public class ConditionService {
                 mark(condition.id(), "TRIGGERED");
                 log.info("条件单{}已触发执行", condition.id());
             } catch (RuntimeException e) {
-                mark(condition.id(), "FAILED");
-                log.warn("条件单{}执行失败：{}", condition.id(), e.getMessage());
+                String msg = e.getMessage();
+                if (e instanceof BusinessException && msg != null
+                        && (msg.contains("非交易日") || msg.contains("非交易时间"))) {
+                    mark(condition.id(), "ACTIVE");
+                    log.info("条件单{}因非交易时段暂缓执行", condition.id());
+                } else {
+                    mark(condition.id(), "FAILED");
+                    log.warn("条件单{}执行失败：{}", condition.id(), e.getMessage());
+                }
             }
         }
     }

@@ -12,6 +12,7 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDate;
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doNothing;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:sqlite:/Users/renlinggao/workspace/stock-trading-simulator/backend/target/trade-test.db",
@@ -30,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "newsfeed.password=admin123"
 })
 class TradeServiceTest {
-    @Autowired TradeService trades;
+    @SpyBean TradeService trades;
     @Autowired JdbcTemplate jdbc;
     @Autowired StockService stocks;
     @MockBean RealTimeQuoteService realTime;
@@ -40,6 +42,7 @@ class TradeServiceTest {
 
     @BeforeEach
     void prepare() {
+        doNothing().when(trades).checkTradingSession();
         Mockito.when(realTime.fetchQuote(Mockito.anyString()))
                 .thenReturn(new RealTimeQuoteService.RealtimeQuote(100.0, 95.0, 10000));
         Mockito.when(pool.realQuote(Mockito.anyString())).thenReturn(Map.of(

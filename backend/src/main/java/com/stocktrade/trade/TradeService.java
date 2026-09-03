@@ -8,6 +8,7 @@ import com.stocktrade.stock.StockPoolService;
 import com.stocktrade.stock.StockQuote;
 import com.stocktrade.stock.StockService;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,12 +20,15 @@ import java.util.Map;
 @Service
 public class TradeService {
     private final JdbcTemplate jdbc;
+    private final JdbcTemplate aStockJdbc;
     private final StockService stocks;
     private final StockPoolService pool;
     private final RealTimeQuoteService realTime;
 
-    public TradeService(JdbcTemplate jdbc, StockService stocks, StockPoolService pool, RealTimeQuoteService realTime) {
+    public TradeService(JdbcTemplate jdbc, @Qualifier("aStockJdbc") JdbcTemplate aStockJdbc,
+                        StockService stocks, StockPoolService pool, RealTimeQuoteService realTime) {
         this.jdbc = jdbc;
+        this.aStockJdbc = aStockJdbc;
         this.stocks = stocks;
         this.pool = pool;
         this.realTime = realTime;
@@ -41,6 +45,7 @@ public class TradeService {
 
     @Transactional
     public Map<String, Object> execute(long userId, String code, String side, Integer quantity, String source) {
+        checkTradingSession();
         if (quantity == null || quantity < 1) throw BusinessException.badRequest("交易数量必须为正整数");
         if (!"buy".equals(side) && !"sell".equals(side)) throw BusinessException.badRequest("交易方向只能是buy或sell");
 
@@ -118,6 +123,10 @@ public class TradeService {
         result.put("source", source);
         result.put("createdAt", now);
         return result;
+    }
+
+    public void checkTradingSession() {
+        TradingRules.checkTradingSession(aStockJdbc);
     }
 
     private void buy(long userId, StockQuote quote, int quantity, double amount, double execPrice, double commission) {
