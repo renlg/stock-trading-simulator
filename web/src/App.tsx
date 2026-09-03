@@ -10,6 +10,7 @@ import AccountPage from './pages/AccountPage'
 import OrdersPage from './pages/OrdersPage'
 import StockDetailPage from './pages/StockDetailPage'
 import BacktestPage from './pages/BacktestPage'
+import CalendarPage from './pages/CalendarPage'
 
 function RequireAuth() {
   return localStorage.getItem('accessToken') ? <MainLayout /> : <Navigate to="/login" replace />
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/backtest" element={<BacktestPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
         </Route>
         <Route path="*" element={<Navigate to={localStorage.getItem('accessToken') ? '/quotes' : '/login'} replace />} />
       </Routes>

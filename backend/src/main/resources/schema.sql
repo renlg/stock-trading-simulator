@@ -69,6 +69,11 @@ CREATE TABLE IF NOT EXISTS conditions (
     triggered_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS trade_calendar (
+    trade_date TEXT PRIMARY KEY,
+    note TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conditions_status ON conditions(status);

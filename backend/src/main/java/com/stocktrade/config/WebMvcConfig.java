@@ -17,6 +17,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/error",
                         "/api/stocks/search", "/api/stocks/quote/*",
                         "/api/stocks/kline/**", "/api/stocks/detail/**",
-                        "/api/backtest/**");
+                        "/api/backtest/**",
+                        "/api/calendar/**");
     }
 }

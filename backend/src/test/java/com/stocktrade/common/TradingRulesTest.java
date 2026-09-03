@@ -9,9 +9,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -47,68 +45,58 @@ class TradingRulesTest {
     }
 
     @Test
-    void 工作日是交易日_查询失败时退化() {
+    void 交易日历为空时退化为工作日判断() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(String.class), anyString()))
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM trade_calendar"), eq(Integer.class)))
+                .thenReturn(0);
+        LocalDate wednesday = LocalDate.of(2026, 3, 4);
+        assertThat(TradingRules.isTradingDay(jdbc, wednesday)).isTrue();
+    }
+
+    @Test
+    void 查询异常时退化为工作日判断() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.queryForObject(anyString(), eq(Integer.class)))
                 .thenThrow(new RuntimeException("table not found"));
         LocalDate wednesday = LocalDate.of(2026, 3, 4);
-        assertThat(wednesday.getDayOfWeek()).isEqualTo(DayOfWeek.WEDNESDAY);
         assertThat(TradingRules.isTradingDay(jdbc, wednesday)).isTrue();
     }
 
     @Test
-    void 工作日是交易日_kline无数据时退化() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.queryForObject(anyString(), eq(String.class), anyString())).thenReturn(null);
-        LocalDate wednesday = LocalDate.of(2026, 3, 4);
-        assertThat(TradingRules.isTradingDay(jdbc, wednesday)).isTrue();
-    }
-
-    @Test
-    void 最近交易日是今天则为交易日() {
+    void 日历中有今天则为交易日() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         LocalDate today = LocalDate.of(2026, 3, 2);
-        when(jdbc.queryForObject(anyString(), eq(String.class), anyString()))
-                .thenReturn(today.toString());
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM trade_calendar"), eq(Integer.class)))
+                .thenReturn(6000);
+        when(jdbc.queryForObject(contains("WHERE trade_date = ?"), eq(Integer.class), eq(today.toString())))
+                .thenReturn(1);
         assertThat(TradingRules.isTradingDay(jdbc, today)).isTrue();
     }
 
     @Test
-    void 最近交易日是昨天且今天为工作日则为交易日() {
+    void 日历中无今天则非交易日() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        LocalDate today = LocalDate.of(2026, 3, 2); // Monday
-        LocalDate yesterday = today.minusDays(1);
-        when(jdbc.queryForObject(anyString(), eq(String.class), anyString()))
-                .thenReturn(yesterday.toString());
+        LocalDate today = LocalDate.of(2026, 3, 4);
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM trade_calendar"), eq(Integer.class)))
+                .thenReturn(6000);
+        when(jdbc.queryForObject(contains("WHERE trade_date = ?"), eq(Integer.class), eq(today.toString())))
+                .thenReturn(0);
+        assertThat(TradingRules.isTradingDay(jdbc, today)).isFalse();
+    }
+
+    @Test
+    void 节假日后恢复交易日() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        LocalDate today = LocalDate.of(2026, 3, 2);
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM trade_calendar"), eq(Integer.class)))
+                .thenReturn(6000);
+        when(jdbc.queryForObject(contains("WHERE trade_date = ?"), eq(Integer.class), eq(today.toString())))
+                .thenReturn(1);
         assertThat(TradingRules.isTradingDay(jdbc, today)).isTrue();
-    }
-
-    @Test
-    void 最近交易日距今超过一天则非交易日_模拟节假日() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        LocalDate today = LocalDate.of(2026, 3, 4); // Wednesday
-        LocalDate twoDaysAgo = today.minusDays(2); // Monday
-        when(jdbc.queryForObject(anyString(), eq(String.class), anyString()))
-                .thenReturn(twoDaysAgo.toString());
-        assertThat(TradingRules.isTradingDay(jdbc, today)).isFalse();
-    }
-
-    @Test
-    void checkTradingSession非交易日抛异常() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        // Mock: latest trade date is 5 days ago → not a trading day
-        LocalDate today = LocalDate.of(2026, 3, 4); // Wednesday
-        LocalDate fiveDaysAgo = today.minusDays(5);
-        when(jdbc.queryForObject(anyString(), eq(String.class), anyString()))
-                .thenReturn(fiveDaysAgo.toString());
-        // We can't control LocalDate.now() in checkTradingSession(jdbc),
-        // so test isTradingDay directly for the non-trading-day scenario
-        assertThat(TradingRules.isTradingDay(jdbc, today)).isFalse();
     }
 
     @Test
     void checkTradingSession交易时段校验() {
-        // Verify isTradingTime boundaries independently
         LocalDate day = LocalDate.of(2026, 3, 2);
         assertThat(TradingRules.isTradingTime(at(day, 9, 29))).isFalse();
         assertThat(TradingRules.isTradingTime(at(day, 9, 30))).isTrue();

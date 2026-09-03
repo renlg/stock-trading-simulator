@@ -126,7 +126,7 @@ public class TradeService {
     }
 
     public void checkTradingSession() {
-        TradingRules.checkTradingSession(aStockJdbc);
+        TradingRules.checkTradingSession(jdbc);
     }
 
     private void buy(long userId, StockQuote quote, int quantity, double amount, double execPrice, double commission) {

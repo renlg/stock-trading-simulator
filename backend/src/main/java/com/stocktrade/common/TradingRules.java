@@ -89,34 +89,31 @@ public final class TradingRules {
     }
 
     /**
-     * 指定日期是否为A股交易日(周一至周五 + kline_daily最近交易日校验节假日)。
-     * 查询失败时退化为仅工作日判断。
+     * 指定日期是否为A股交易日: 查 trade_calendar 表(本库), 表中有记录即为交易日。
+     * trade_calendar 空(未初始化)时退化为仅工作日判断。
      */
-    public static boolean isTradingDay(JdbcTemplate aStockJdbc, LocalDate today) {
+    public static boolean isTradingDay(JdbcTemplate jdbc, LocalDate today) {
         DayOfWeek dow = today.getDayOfWeek();
         if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) return false;
         try {
-            String from = today.minusDays(10).format(DATE_FMT);
-            String latest = aStockJdbc.queryForObject(
-                    "SELECT MAX(trade_date) FROM kline_daily WHERE trade_date >= ?",
-                    String.class, from);
-            if (latest == null) return true;
-            LocalDate latestDate = LocalDate.parse(latest, DATE_FMT);
-            if (latestDate.equals(today)) return true;
-            if (latestDate.equals(today.minusDays(1))) return true;
-            return false;
+            Integer total = jdbc.queryForObject("SELECT COUNT(*) FROM trade_calendar", Integer.class);
+            if (total == null || total == 0) return true;
+            Integer count = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM trade_calendar WHERE trade_date = ?",
+                    Integer.class, today.format(DATE_FMT));
+            return count != null && count > 0;
         } catch (Exception e) {
             return true;
         }
     }
 
-    public static boolean isTradingDay(JdbcTemplate aStockJdbc) {
-        return isTradingDay(aStockJdbc, LocalDate.now());
+    public static boolean isTradingDay(JdbcTemplate jdbc) {
+        return isTradingDay(jdbc, LocalDate.now());
     }
 
     /** 校验当前是否为交易时段(交易日+交易时间), 否则抛 BusinessException */
-    public static void checkTradingSession(JdbcTemplate aStockJdbc) {
-        if (!isTradingDay(aStockJdbc)) throw BusinessException.badRequest("非交易日无法交易");
+    public static void checkTradingSession(JdbcTemplate jdbc) {
+        if (!isTradingDay(jdbc)) throw BusinessException.badRequest("非交易日无法交易");
         if (!isTradingTime()) throw BusinessException.badRequest("非交易时间(9:30-11:30, 13:00-15:00)无法交易");
     }
 
