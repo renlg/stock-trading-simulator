@@ -60,6 +60,12 @@ public class RealTimeQuoteService {
     }
 
     private static String marketPrefix(String code) {
+        // 北交所(43/83/87/920开头)用 bj 前缀; 新浪不支持时拉取失败返回 null,
+        // 由调用方降级为本地行情, 不影响交易。900开头为沪市B股, 仍归 sh
+        if (code.startsWith("43") || code.startsWith("83") || code.startsWith("87")
+                || code.startsWith("92")) {
+            return "bj";
+        }
         return code.startsWith("6") || code.startsWith("9") ? "sh" : "sz";
     }
 }

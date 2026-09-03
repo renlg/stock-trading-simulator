@@ -1,11 +1,10 @@
 package com.stocktrade.config;
 
-import org.springframework.beans.factory.annotation.Qualifier;
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
 
@@ -31,9 +30,16 @@ public class AStockDataSourceConfig {
 
     @Bean(name = "aStockJdbc")
     public JdbcTemplate aStockJdbc() {
-        DriverManagerDataSource ds = new DriverManagerDataSource();
+        // 行情引擎每2秒高频查询, 用 HikariCP 池化只读连接避免频繁建连。
+        // 无参构造为懒初始化: 数据文件缺失时与 DriverManagerDataSource 一样在首次使用才报错, 不影响启动。
+        // 注意: 不能调 setReadOnly(true) —— sqlite-jdbc 连接建立后调用 setReadOnly 会直接抛异常,
+        // 只读保证由 URL 的 mode=ro + connectionInitSql 的 query_only 共同承担。
+        HikariDataSource ds = new HikariDataSource();
+        ds.setPoolName("a-stock-ro");
         ds.setDriverClassName("org.sqlite.JDBC");
-        ds.setUrl("jdbc:sqlite:file:" + A_STOCK_DB + "?mode=ro");
+        ds.setJdbcUrl("jdbc:sqlite:file:" + A_STOCK_DB + "?mode=ro");
+        ds.setMaximumPoolSize(5);
+        ds.setConnectionInitSql("PRAGMA query_only = true");
         return new JdbcTemplate(ds);
     }
 }

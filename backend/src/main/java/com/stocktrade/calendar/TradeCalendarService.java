@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -50,12 +51,7 @@ public class TradeCalendarService {
         try {
             List<String> dates = aStockJdbc.queryForList(
                     "SELECT DISTINCT trade_date FROM kline_daily ORDER BY trade_date", String.class);
-            int imported = 0;
-            for (String date : dates) {
-                int rows = jdbc.update(
-                        "INSERT OR IGNORE INTO trade_calendar(trade_date) VALUES(?)", date);
-                imported += rows;
-            }
+            int imported = insertDatesInBatches(dates);
             log.info("从 a-stock 导入 {} 个交易日 (共查询 {} 个)", imported, dates.size());
         } catch (Exception e) {
             log.warn("从 a-stock 导入交易日失败: {}", e.getMessage());
@@ -65,15 +61,25 @@ public class TradeCalendarService {
     private void prefillFutureWeekdays() {
         LocalDate start = LocalDate.now().plusDays(1);
         LocalDate end = LocalDate.of(Year.now().getValue() + 1, 12, 31);
-        int count = 0;
+        List<String> dates = new ArrayList<>();
         for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
             DayOfWeek dow = d.getDayOfWeek();
             if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
-            int rows = jdbc.update(
-                    "INSERT OR IGNORE INTO trade_calendar(trade_date) VALUES(?)", d.toString());
-            count += rows;
+            dates.add(d.toString());
         }
+        int count = insertDatesInBatches(dates);
         log.info("预填未来工作日: {} 天 ({} ~ {})", count, start, end);
+    }
+
+    /** 多值 INSERT OR IGNORE 批量写入(每批500条), 避免数千条逐条 autocommit 拖慢启动 */
+    private int insertDatesInBatches(List<String> dates) {
+        int inserted = 0;
+        for (int i = 0; i < dates.size(); i += 500) {
+            List<String> batch = dates.subList(i, Math.min(i + 500, dates.size()));
+            String values = String.join(",", java.util.Collections.nCopies(batch.size(), "(?)"));
+            inserted += jdbc.update("INSERT OR IGNORE INTO trade_calendar(trade_date) VALUES " + values, batch.toArray());
+        }
+        return inserted;
     }
 
     public boolean isTradingDay(LocalDate date) {

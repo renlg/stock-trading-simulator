@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS conditions (
     quantity INTEGER,
     status TEXT,
     created_at TEXT,
-    triggered_at TEXT
+    triggered_at TEXT,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    fail_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS trade_calendar (

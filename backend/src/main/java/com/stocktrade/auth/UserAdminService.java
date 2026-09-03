@@ -1,6 +1,8 @@
 package com.stocktrade.auth;
 
 import com.stocktrade.common.BusinessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -11,6 +13,7 @@ import java.util.Map;
 
 @Service
 public class UserAdminService {
+    private static final Logger log = LoggerFactory.getLogger(UserAdminService.class);
     private final JdbcTemplate jdbc;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -33,12 +36,13 @@ public class UserAdminService {
                 });
     }
 
-    public void resetPassword(long targetUserId, String newPassword) {
+    public void resetPassword(long targetUserId, String newPassword, long operatorId) {
         if (newPassword == null || newPassword.length() < 6 || newPassword.length() > 72)
             throw BusinessException.badRequest("密码长度应为6到72个字符");
         int rows = jdbc.update("UPDATE users SET password_hash=? WHERE id=?",
                 encoder.encode(newPassword), targetUserId);
         if (rows == 0) throw BusinessException.notFound("用户不存在");
+        log.info("[审计] 操作者{}重置了用户{}的密码", operatorId, targetUserId);
     }
 
     public void setStatus(long targetUserId, String status, long operatorId) {
@@ -49,6 +53,7 @@ public class UserAdminService {
         if ("disabled".equals(status)) {
             jdbc.update("DELETE FROM auth_tokens WHERE user_id=?", targetUserId);
         }
+        log.info("[审计] 操作者{}将用户{}状态改为{}", operatorId, targetUserId, status);
     }
 
     public void deleteUser(long targetUserId, long operatorId) {
@@ -62,5 +67,6 @@ public class UserAdminService {
         jdbc.update("DELETE FROM positions WHERE user_id=?", targetUserId);
         jdbc.update("DELETE FROM watch_stocks WHERE user_id=?", targetUserId);
         jdbc.update("DELETE FROM users WHERE id=?", targetUserId);
+        log.info("[审计] 操作者{}删除了用户{}", operatorId, targetUserId);
     }
 }

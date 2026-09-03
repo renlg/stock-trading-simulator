@@ -11,7 +11,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,14 +24,17 @@ public class TradeService {
     private final StockService stocks;
     private final StockPoolService pool;
     private final RealTimeQuoteService realTime;
+    private final TransactionTemplate transactions;
 
     public TradeService(JdbcTemplate jdbc, @Qualifier("aStockJdbc") JdbcTemplate aStockJdbc,
-                        StockService stocks, StockPoolService pool, RealTimeQuoteService realTime) {
+                        StockService stocks, StockPoolService pool, RealTimeQuoteService realTime,
+                        TransactionTemplate transactions) {
         this.jdbc = jdbc;
         this.aStockJdbc = aStockJdbc;
         this.stocks = stocks;
         this.pool = pool;
         this.realTime = realTime;
+        this.transactions = transactions;
     }
 
     @PostConstruct
@@ -43,7 +46,6 @@ public class TradeService {
         }
     }
 
-    @Transactional
     public Map<String, Object> execute(long userId, String code, String side, Integer quantity, String source) {
         checkTradingSession();
         if (quantity == null || quantity < 1) throw BusinessException.badRequest("交易数量必须为正整数");
@@ -55,6 +57,7 @@ public class TradeService {
 
         StockQuote quote = ensureLoaded(userId, code);
 
+        // 实时行情是同步外部 HTTP 调用(超时可达8s), 必须放在事务外, 避免长时间占用数据库连接
         RealTimeQuoteService.RealtimeQuote rtQuote = realTime.fetchQuote(code);
         double execPrice;
         double prevClose;
@@ -67,6 +70,8 @@ public class TradeService {
                 execPrice = quote.price();
                 prevClose = quote.prevClose();
             }
+            // 启发式停牌判断: 成交量=0且价格>0。stock_pool 无停牌字段可用,
+            // 集合竞价初期或行情数据缺失时可能误判, 属已知局限
             if (rtQuote.volume() == 0 && execPrice > 0) {
                 suspended = true;
             }
@@ -95,11 +100,18 @@ public class TradeService {
 
         double amount = execPrice * quantity;
         double commission = TradingRules.calcCommission(amount);
+        final double tradePrice = execPrice;
 
+        return transactions.execute(status -> settle(userId, quote, side, quantity, tradePrice, amount, commission, source));
+    }
+
+    /** 事务内原子执行: 变更资金/持仓并落订单。last_insert_rowid 必须与 INSERT 同连接, 故整体留在事务内 */
+    private Map<String, Object> settle(long userId, StockQuote quote, String side, int quantity,
+                                       double execPrice, double amount, double commission, String source) {
         if ("buy".equals(side)) {
             buy(userId, quote, quantity, amount, execPrice, commission);
         } else {
-            sell(userId, code, quantity, amount, execPrice, commission);
+            sell(userId, quote.code(), quantity, amount, execPrice, commission);
         }
 
         String now = AuthService.now();
@@ -136,7 +148,7 @@ public class TradeService {
 
         jdbc.update("UPDATE users SET balance=balance-? WHERE id=?", totalCost, userId);
 
-        String availableDate = TradingRules.nextTradingDay();
+        String availableDate = TradingRules.nextTradingDay(jdbc);
         var positions = jdbc.query("SELECT quantity,avg_cost FROM positions WHERE user_id=? AND code=?",
                 (rs, n) -> new Position(rs.getInt(1), rs.getDouble(2)), userId, quote.code());
 
@@ -156,6 +168,11 @@ public class TradeService {
         var held = jdbc.query("SELECT quantity,available_date FROM positions WHERE user_id=? AND code=?",
                 (rs, n) -> new PositionWithDate(rs.getInt(1), rs.getString(2)), userId, code);
         if (held.isEmpty() || held.get(0).quantity() < quantity) throw BusinessException.badRequest("持仓不足");
+
+        // A股卖出规则: 数量须为100股整数倍; 持仓含零股时只能一次性全部卖出
+        if (quantity % 100 != 0 && quantity != held.get(0).quantity()) {
+            throw BusinessException.badRequest("卖出数量必须为100股整数倍（零股只能全部卖出）");
+        }
 
         String availableDate = held.get(0).availableDate();
         if (!TradingRules.canSell(availableDate)) {

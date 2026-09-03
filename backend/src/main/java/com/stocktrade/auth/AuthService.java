@@ -128,7 +128,11 @@ public class AuthService {
 
     @Transactional
     public void logout(String accessToken) {
-        jdbc.update("DELETE FROM auth_tokens WHERE access_token=?", accessToken);
+        // 删除该用户全部 token(含 refresh token), 使已签发的刷新令牌一并失效
+        var userIds = jdbc.query("SELECT user_id FROM auth_tokens WHERE access_token=?",
+                (rs, n) -> rs.getLong(1), accessToken);
+        if (userIds.isEmpty()) return;
+        jdbc.update("DELETE FROM auth_tokens WHERE user_id=?", userIds.get(0));
     }
 
     public Map<String, Object> me(long userId) {

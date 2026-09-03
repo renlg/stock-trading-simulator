@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,6 +21,11 @@ import java.util.Map;
  */
 @Service
 public class StockPoolService {
+    /** SQLite 单语句绑定变量上限为999, IN 列表按100只分批留足余量 */
+    private static final int SQL_IN_BATCH = 100;
+    /** 昨收回看窗口天数 */
+    private static final int PREV_CLOSE_LOOKBACK_DAYS = 30;
+
     private final JdbcTemplate jdbc;      // 模拟盘自己的库
     private final JdbcTemplate astock;    // /opt/a-stock 只读库
     private final NewsFeedClient newsFeed;
@@ -141,12 +147,84 @@ public class StockPoolService {
         return result;
     }
 
-    /** 批量读取关注池真实行情 */
-    public List<Map<String, Object>> realQuotes(List<String> codes) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (String code : codes) {
-            Map<String, Object> q = realQuote(code);
-            if (q != null) result.add(q);
+    /** 批量读取真实行情: 每批一次 IN 查询取最新分钟线/昨收/名称, 避免逐只 3 条 SQL 的 N+1 */
+    public Map<String, Map<String, Object>> realQuoteBatch(List<String> codes) {
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        if (codes == null || codes.isEmpty()) return result;
+        List<String> distinct = codes.stream().filter(c -> c != null && !c.isBlank()).distinct().toList();
+        if (distinct.isEmpty()) return result;
+        String cutoff = prevCloseCutoff();
+        for (int i = 0; i < distinct.size(); i += SQL_IN_BATCH) {
+            result.putAll(realQuoteBatch0(distinct.subList(i, Math.min(i + SQL_IN_BATCH, distinct.size())), cutoff));
+        }
+        return result;
+    }
+
+    /** 昨收回看窗口起点: 全局最新交易日往前30天(覆盖长假), 窗口内数据不足的股票由单只查询兜底 */
+    private String prevCloseCutoff() {
+        List<String> latest = astock.query("SELECT MAX(trade_date) FROM kline_daily", (rs, n) -> rs.getString(1));
+        if (latest.isEmpty() || latest.get(0) == null) return "0000-00-00";
+        return LocalDate.parse(latest.get(0)).minusDays(PREV_CLOSE_LOOKBACK_DAYS).toString();
+    }
+
+    private Map<String, Map<String, Object>> realQuoteBatch0(List<String> batch, String cutoff) {
+        String placeholders = String.join(",", java.util.Collections.nCopies(batch.size(), "?"));
+
+        // 最新分钟线: 先按 (sec_code, trade_time) 索引聚合每只最新时间, 再回表取整根K线
+        Map<String, Map<String, Object>> latest = new LinkedHashMap<>();
+        for (Map<String, Object> row : astock.queryForList("SELECT m.sec_code,m.trade_time,m.open,m.high,m.low,m.close FROM kline_min5 m " +
+                "JOIN (SELECT sec_code,MAX(trade_time) AS mt FROM kline_min5 WHERE sec_code IN (" + placeholders + ") GROUP BY sec_code) l " +
+                "ON m.sec_code=l.sec_code AND m.trade_time=l.mt", batch.toArray())) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("time", row.get("trade_time"));
+            m.put("open", row.get("open"));
+            m.put("high", row.get("high"));
+            m.put("low", row.get("low"));
+            m.put("close", row.get("close"));
+            latest.put((String) row.get("sec_code"), m);
+        }
+
+        // 昨收: 窗口内每只最新两根日线; 长期停牌导致窗口内不足两根时, 回退单只 LIMIT 2 保证与逐只查询同语义
+        Map<String, List<Double>> daily = new LinkedHashMap<>();
+        Object[] dailyArgs = java.util.stream.Stream.concat(batch.stream(), java.util.stream.Stream.of(cutoff)).toArray();
+        for (Map<String, Object> row : astock.queryForList("SELECT sec_code,close FROM (" +
+                "SELECT sec_code,trade_date,close,ROW_NUMBER() OVER (PARTITION BY sec_code ORDER BY trade_date DESC) rn " +
+                "FROM kline_daily WHERE sec_code IN (" + placeholders + ") AND trade_date >= ?) " +
+                "WHERE rn<=2 ORDER BY sec_code,trade_date DESC", dailyArgs)) {
+            daily.computeIfAbsent((String) row.get("sec_code"), k -> new ArrayList<>()).add((Double) row.get("close"));
+        }
+        for (String code : batch) {
+            if (daily.getOrDefault(code, List.of()).size() >= 2) continue;
+            List<Double> closes = astock.query("SELECT close FROM kline_daily WHERE sec_code=? ORDER BY trade_date DESC LIMIT 2",
+                    (rs, n) -> rs.getDouble(1), code);
+            if (!closes.isEmpty()) daily.put(code, closes);
+        }
+
+        Map<String, String> names = new LinkedHashMap<>();
+        for (Map<String, Object> row : astock.queryForList("SELECT sec_code,sec_name FROM stock_pool WHERE sec_code IN (" + placeholders + ")",
+                batch.toArray())) {
+            names.put((String) row.get("sec_code"), (String) row.get("sec_name"));
+        }
+
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        for (String code : batch) {
+            Map<String, Object> k = latest.get(code);
+            if (k == null) continue; // 无分钟线数据, 跳过
+            List<Double> closes = daily.get(code);
+            double prevClose = closes == null || closes.isEmpty() ? 0 : (closes.size() >= 2 ? closes.get(1) : closes.get(0));
+            double price = ((Number) k.get("close")).doubleValue();
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("code", code);
+            r.put("name", names.getOrDefault(code, code));
+            r.put("price", price);
+            r.put("prevClose", prevClose);
+            r.put("high", k.get("high"));
+            r.put("low", k.get("low"));
+            r.put("open", k.get("open"));
+            r.put("time", k.get("time"));
+            r.put("change", price - prevClose);
+            r.put("changePct", prevClose == 0 ? 0 : (price - prevClose) / prevClose * 100);
+            result.put(code, r);
         }
         return result;
     }

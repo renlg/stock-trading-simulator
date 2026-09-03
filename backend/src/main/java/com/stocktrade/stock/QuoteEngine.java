@@ -11,8 +11,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -64,7 +62,7 @@ public class QuoteEngine {
         if (service != null) service.checkAndTrigger();
     }
 
-    /** 从 /opt/a-stock 读所有用户自选并集的最新分钟线+昨收, 更新内存行情 */
+    /** 从 /opt/a-stock 批量读所有用户自选并集的最新分钟线+昨收, 更新内存行情 */
     private void refreshFromRealData() {
         List<Map<String, Object>> watch = pool.allWatchList();
         String now = AuthService.now();
@@ -74,12 +72,21 @@ public class QuoteEngine {
         for (StockQuote q : stocks.all()) {
             if (!active.contains(q.code())) stocks.remove(q.code());
         }
+        if (watch.isEmpty()) return;
+
+        Map<String, Map<String, Object>> quotes;
+        try {
+            quotes = pool.realQuoteBatch(new java.util.ArrayList<>(active));
+        } catch (Exception e) {
+            log.warn("批量刷新行情失败: {}", e.getMessage());
+            return;
+        }
         for (Map<String, Object> w : watch) {
             String code = (String) w.get("code");
             String name = (String) w.get("name");
+            Map<String, Object> q = quotes.get(code);
+            if (q == null) continue; // 无分钟线数据, 跳过
             try {
-                Map<String, Object> q = pool.realQuote(code);
-                if (q == null) continue; // 无分钟线数据, 跳过
                 double price = ((Number) q.get("price")).doubleValue();
                 double prevClose = ((Number) q.get("prevClose")).doubleValue();
                 double high = ((Number) q.get("high")).doubleValue();
@@ -105,9 +112,5 @@ public class QuoteEngine {
                     ps.setDouble(5, quote.high()); ps.setDouble(6, quote.low());
                     ps.setString(7, quote.updatedAt());
                 });
-    }
-
-    private static double round(double value) {
-        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 }

@@ -1,6 +1,7 @@
 import { ApiOutlined, BarChartOutlined, CalendarOutlined, ExperimentOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SettingOutlined, SwapOutlined } from '@ant-design/icons'
 import { Button, Layout, Menu, Space, Typography } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import api from '../api'
 
 const { Header, Content, Sider } = Layout
 
@@ -23,6 +24,8 @@ export default function MainLayout() {
     : baseItems
 
   const logout = () => {
+    // 通知后端使服务端 token 失效(含 refresh token), 失败不阻塞退出
+    void api.post('/auth/logout').catch(() => undefined)
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('username')

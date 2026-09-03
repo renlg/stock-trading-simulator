@@ -77,23 +77,48 @@ class TradeServiceTest {
 
     @Test
     void 卖出应增加资金并减少持仓() {
-        trades.execute(userId, "000001", "buy", 100, "web");
+        trades.execute(userId, "000001", "buy", 200, "web");
         String pastDate = LocalDate.now().minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
         jdbc.update("UPDATE positions SET available_date=? WHERE user_id=? AND code='000001'",
                 pastDate, userId);
 
-        trades.execute(userId, "000001", "sell", 40, "web");
+        trades.execute(userId, "000001", "sell", 100, "web");
 
-        double buyCommission = Math.max(100.0 * 100 * 0.00025, 5.0);
-        double sellAmount = 100.0 * 40;
+        double buyCommission = Math.max(100.0 * 200 * 0.00025, 5.0);
+        double sellAmount = 100.0 * 100;
         double sellCommission = Math.max(sellAmount * 0.00025, 5.0);
         double stampDuty = sellAmount * 0.0005;
-        double expectedBalance = 1_000_000 - 100.0 * 60 - buyCommission - sellCommission - stampDuty;
+        double expectedBalance = 1_000_000 - 100.0 * 100 - buyCommission - sellCommission - stampDuty;
 
         assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=? AND code='000001'", Integer.class, userId))
-                .isEqualTo(60);
+                .isEqualTo(100);
         assertThat(jdbc.queryForObject("SELECT balance FROM users WHERE id=?", Double.class, userId))
                 .isEqualTo(expectedBalance);
+    }
+
+    @Test
+    void 卖出数量非100整数倍且非全部持仓应拒绝() {
+        trades.execute(userId, "000001", "buy", 200, "web");
+        String pastDate = LocalDate.now().minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        jdbc.update("UPDATE positions SET available_date=? WHERE user_id=? AND code='000001'",
+                pastDate, userId);
+
+        assertThatThrownBy(() -> trades.execute(userId, "000001", "sell", 150, "web"))
+                .isInstanceOf(BusinessException.class).hasMessage("卖出数量必须为100股整数倍（零股只能全部卖出）");
+        assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=? AND code='000001'", Integer.class, userId))
+                .isEqualTo(200);
+    }
+
+    @Test
+    void 零股持仓可一次性全部卖出() {
+        String pastDate = LocalDate.now().minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        jdbc.update("INSERT INTO positions(user_id,code,quantity,avg_cost,available_date,updated_at) VALUES(?,?,?,?,?,?)",
+                userId, "000001", 140, 100.0, pastDate, "now");
+
+        trades.execute(userId, "000001", "sell", 140, "web");
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM positions WHERE user_id=? AND code='000001'", Integer.class, userId))
+                .isZero();
     }
 
     @Test

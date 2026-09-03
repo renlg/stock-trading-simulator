@@ -5,14 +5,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * A股交易规则公共工具:
- * - 涨跌停幅度判断(主板10%/创业板科创板20%/ST股5%)
+ * - 涨跌停幅度判断(主板10%/创业板科创板20%/北交所30%/ST股5%)
  * - 手续费计算(佣金0.025%最低5元, 印花税0.05%仅卖出)
- * - 下一个交易日计算(简单算法: +1自然日, 周末顺延)
+ * - 下一个交易日计算(优先查交易日历, 空时退化为+1自然日周末顺延)
  */
 public final class TradingRules {
     private TradingRules() {}
@@ -26,6 +27,7 @@ public final class TradingRules {
      * 根据股票代码判断涨跌停幅度
      * - 300/301开头: 创业板 20%
      * - 688/689开头: 科创板 20%
+     * - 8/43/92开头: 北交所 30% (83/87/88/920/430等)
      * - 名称含ST: 5%
      * - 其他(主板): 10%
      */
@@ -34,6 +36,9 @@ public final class TradingRules {
             if (code.startsWith("300") || code.startsWith("301")
                     || code.startsWith("688") || code.startsWith("689")) {
                 return 0.20;
+            }
+            if (code.startsWith("8") || code.startsWith("43") || code.startsWith("92")) {
+                return 0.30;
             }
         }
         if (name != null && name.contains("ST")) {
@@ -53,9 +58,23 @@ public final class TradingRules {
     }
 
     /**
-     * 计算下一个交易日(简单算法: +1自然日, 周末顺延, 忽略节假日)
+     * 计算下一个交易日: 优先查 trade_calendar(含节假日/调休休市标记),
+     * 日历为空或查询异常时退化为仅周末顺延算法。
      * 用于T+1规则: 当天买入的股票, 最早下一个交易日才能卖
      */
+    public static String nextTradingDay(JdbcTemplate jdbc) {
+        LocalDate today = LocalDate.now();
+        try {
+            List<String> next = jdbc.query(
+                    "SELECT trade_date FROM trade_calendar WHERE trade_date > ? ORDER BY trade_date LIMIT 1",
+                    (rs, n) -> rs.getString(1), today.format(DATE_FMT));
+            if (!next.isEmpty()) return next.get(0);
+        } catch (Exception ignored) {
+        }
+        return nextTradingDay();
+    }
+
+    /** 下一个交易日(退化算法: +1自然日, 周末顺延, 忽略节假日) */
     public static String nextTradingDay() {
         LocalDate today = LocalDate.now();
         LocalDate next = today.plusDays(1);

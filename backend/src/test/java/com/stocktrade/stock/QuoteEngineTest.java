@@ -29,15 +29,16 @@ class QuoteEngineTest {
     void prepare() {
         stocks.reload();
         stocks.put(new StockQuote("000001", "平安银行", 10.0, 10.5, 10.8, 10.2, "now"));
-        // mock 所有用户自选并集 + 真实行情
+        // mock 所有用户自选并集 + 批量真实行情
         Mockito.when(pool.allWatchList()).thenReturn(List.of(
                 Map.of("code", "000001", "name", "平安银行")
         ));
-        Mockito.when(pool.realQuote("000001")).thenReturn(Map.of(
-                "code", "000001", "name", "平安银行",
-                "price", 10.9, "prevClose", 10.0,
-                "high", 11.0, "low", 10.6, "open", 10.5, "time", "2026-09-02 15:00",
-                "change", 0.9, "changePct", 9.0));
+        Mockito.when(pool.realQuoteBatch(Mockito.anyList())).thenReturn(Map.of(
+                "000001", Map.of(
+                        "code", "000001", "name", "平安银行",
+                        "price", 10.9, "prevClose", 10.0,
+                        "high", 11.0, "low", 10.6, "open", 10.5, "time", "2026-09-02 15:00",
+                        "change", 0.9, "changePct", 9.0)));
     }
 
     @Test

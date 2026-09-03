@@ -57,11 +57,11 @@ class ConditionServiceTest {
     void 卖出价达到条件时应触发() {
         StockQuote quote = stocks.get("000001");
         jdbc.update("INSERT INTO positions(user_id,code,quantity,avg_cost,updated_at) VALUES(?,?,?,?,?)",
-                userId, quote.code(), 20, quote.price(), "now");
-        conditions.create(userId, "000001", "sell", quote.price(), 5);
+                userId, quote.code(), 120, quote.price(), "now");
+        conditions.create(userId, "000001", "sell", quote.price(), 100);
         conditions.checkAndTrigger();
         assertStatus("TRIGGERED");
-        assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=?", Integer.class, userId)).isEqualTo(15);
+        assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=?", Integer.class, userId)).isEqualTo(20);
     }
 
     @Test
@@ -83,7 +83,36 @@ class ConditionServiceTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orders", Integer.class)).isZero();
     }
 
+    @Test
+    void 瞬时异常可重试超过上限应标记失败() {
+        double price = stocks.get("000001").price();
+        conditions.create(userId, "000001", "buy", price, 100);
+        org.mockito.Mockito.doThrow(new RuntimeException("db locked"))
+                .when(trades).execute(org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString());
+
+        conditions.checkAndTrigger();
+        assertStatus("ACTIVE");
+        assertThat(failCount()).isEqualTo(1);
+
+        conditions.checkAndTrigger();
+        assertStatus("ACTIVE");
+        assertThat(failCount()).isEqualTo(2);
+
+        conditions.checkAndTrigger();
+        assertStatus("FAILED");
+        assertThat(failCount()).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT fail_reason FROM conditions ORDER BY id DESC LIMIT 1", String.class))
+                .isEqualTo("db locked");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orders", Integer.class)).isZero();
+    }
+
     private void assertStatus(String expected) {
         assertThat(jdbc.queryForObject("SELECT status FROM conditions ORDER BY id DESC LIMIT 1", String.class)).isEqualTo(expected);
+    }
+
+    private Integer failCount() {
+        return jdbc.queryForObject("SELECT fail_count FROM conditions ORDER BY id DESC LIMIT 1", Integer.class);
     }
 }

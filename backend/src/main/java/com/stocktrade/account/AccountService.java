@@ -37,13 +37,16 @@ public class AccountService {
                     String code = rs.getString("code");
                     int quantity = rs.getInt("quantity");
                     double avgCost = rs.getDouble("avg_cost");
-                    StockQuote quote = stocks.get(code);
-                    double marketValue = quote.price() * quantity;
-                    double profit = (quote.price() - avgCost) * quantity;
+                    // 行情缓存缺失(如引擎尚未刷新该股)时降级用成本价/代码, 保证持仓接口不整体失败
+                    StockQuote quote = stocks.getOrNull(code);
+                    double price = quote != null ? quote.price() : avgCost;
+                    String name = quote != null ? quote.name() : code;
+                    double marketValue = price * quantity;
+                    double profit = (price - avgCost) * quantity;
                     Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("code", code); row.put("name", quote.name()); row.put("quantity", quantity);
-                    row.put("avgCost", avgCost); row.put("price", quote.price()); row.put("marketValue", marketValue);
-                    row.put("profit", profit); row.put("profitPct", avgCost == 0 ? 0 : (quote.price() - avgCost) / avgCost * 100);
+                    row.put("code", code); row.put("name", name); row.put("quantity", quantity);
+                    row.put("avgCost", avgCost); row.put("price", price); row.put("marketValue", marketValue);
+                    row.put("profit", profit); row.put("profitPct", avgCost == 0 ? 0 : (price - avgCost) / avgCost * 100);
                     row.put("updatedAt", rs.getString("updated_at"));
                     return row;
                 }, userId);

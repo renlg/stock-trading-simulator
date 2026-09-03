@@ -17,6 +17,10 @@ stock:
     interval-ms: 2000
     persist-ticks: 30
 
+app:
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000,http://124.220.15.120:8897,https://124.220.15.120:8897
+
 newsfeed:
   base-url: http://127.0.0.1:8891
   username: admin

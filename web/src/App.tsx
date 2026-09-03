@@ -37,7 +37,7 @@ export default function App() {
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/backtest" element={<BacktestPage />} />
           <Route path="/calendar" element={<RequireAdmin><CalendarPage /></RequireAdmin>} />
-          <Route path="/admin/users" element={<AccountManagePage />} />
+          <Route path="/admin/users" element={<RequireAdmin><AccountManagePage /></RequireAdmin>} />
         </Route>
         <Route path="*" element={<Navigate to={localStorage.getItem('accessToken') ? '/quotes' : '/login'} replace />} />
       </Routes>

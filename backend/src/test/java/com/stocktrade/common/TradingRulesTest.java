@@ -1,12 +1,14 @@
 package com.stocktrade.common;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -102,6 +104,39 @@ class TradingRulesTest {
         assertThat(TradingRules.isTradingTime(at(day, 9, 30))).isTrue();
         assertThat(TradingRules.isTradingTime(at(day, 15, 0))).isTrue();
         assertThat(TradingRules.isTradingTime(at(day, 15, 1))).isFalse();
+    }
+
+    @Test
+    void 北交所涨跌幅为百分之30() {
+        assertThat(TradingRules.getLimitPct("830799", null)).isEqualTo(0.30);
+        assertThat(TradingRules.getLimitPct("430047", null)).isEqualTo(0.30);
+        assertThat(TradingRules.getLimitPct("870357", null)).isEqualTo(0.30);
+        assertThat(TradingRules.getLimitPct("920001", null)).isEqualTo(0.30);
+    }
+
+    @Test
+    void 沪市B股900开头仍为主板涨跌幅() {
+        assertThat(TradingRules.getLimitPct("900901", null)).isEqualTo(0.10);
+    }
+
+    @Test
+    void nextTradingDay优先取交易日历() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(anyString(), ArgumentMatchers.<org.springframework.jdbc.core.RowMapper<String>>any(), anyString()))
+                .thenReturn(List.of("2026-10-09"));
+        assertThat(TradingRules.nextTradingDay(jdbc)).isEqualTo("2026-10-09");
+    }
+
+    @Test
+    void 交易日历为空时nextTradingDay退化周末顺延() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(anyString(), ArgumentMatchers.<org.springframework.jdbc.core.RowMapper<String>>any(), anyString()))
+                .thenReturn(List.of());
+        LocalDate next = LocalDate.now().plusDays(1);
+        while (next.getDayOfWeek() == DayOfWeek.SATURDAY || next.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            next = next.plusDays(1);
+        }
+        assertThat(TradingRules.nextTradingDay(jdbc)).isEqualTo(next.toString());
     }
 
     private static LocalDateTime at(LocalDate date, int hour, int minute) {

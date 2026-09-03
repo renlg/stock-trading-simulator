@@ -22,8 +22,8 @@ public class UserAdminController {
     }
 
     @PostMapping("/{id}/reset-password")
-    public Result<Void> resetPassword(@PathVariable long id, @RequestBody Map<String, String> body) {
-        service.resetPassword(id, body.get("password"));
+    public Result<Void> resetPassword(@PathVariable long id, @RequestBody Map<String, String> body, HttpServletRequest request) {
+        service.resetPassword(id, body.get("password"), AuthContext.userId(request));
         return Result.success();
     }
 
