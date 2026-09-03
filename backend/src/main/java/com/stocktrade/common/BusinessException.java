@@ -20,6 +20,10 @@ public class BusinessException extends RuntimeException {
         return new BusinessException(HttpStatus.UNAUTHORIZED, 401, message);
     }
 
+    public static BusinessException forbidden(String message) {
+        return new BusinessException(HttpStatus.FORBIDDEN, 403, message);
+    }
+
     public static BusinessException notFound(String message) {
         return new BusinessException(HttpStatus.NOT_FOUND, 404, message);
     }

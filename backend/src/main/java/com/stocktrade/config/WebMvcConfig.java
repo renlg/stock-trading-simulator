@@ -1,5 +1,6 @@
 package com.stocktrade.config;
 
+import com.stocktrade.auth.AdminInterceptor;
 import com.stocktrade.auth.AuthInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -8,7 +9,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
     private final AuthInterceptor interceptor;
-    public WebMvcConfig(AuthInterceptor interceptor) { this.interceptor = interceptor; }
+    private final AdminInterceptor adminInterceptor;
+
+    public WebMvcConfig(AuthInterceptor interceptor, AdminInterceptor adminInterceptor) {
+        this.interceptor = interceptor;
+        this.adminInterceptor = adminInterceptor;
+    }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -19,5 +25,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/stocks/kline/**", "/api/stocks/detail/**",
                         "/api/backtest/**",
                         "/api/calendar/**");
+        registry.addInterceptor(adminInterceptor).addPathPatterns("/api/admin/**");
     }
 }

@@ -6,7 +6,7 @@ import api from '../api'
 import type { ApiResponse } from '../types'
 import { getData } from '../utils'
 
-interface AuthResult { accessToken: string; refreshToken: string; username: string }
+interface AuthResult { accessToken: string; refreshToken: string; username: string; role: string }
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -32,6 +32,7 @@ export default function LoginPage() {
       localStorage.setItem('accessToken', result.accessToken)
       localStorage.setItem('refreshToken', result.refreshToken)
       localStorage.setItem('username', result.username || values.username)
+      localStorage.setItem('role', result.role || 'user')
       message.success('登录成功')
       navigate('/quotes', { replace: true })
     } catch {

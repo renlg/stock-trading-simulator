@@ -1,10 +1,10 @@
-import { ApiOutlined, BarChartOutlined, CalendarOutlined, ExperimentOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SwapOutlined } from '@ant-design/icons'
+import { ApiOutlined, BarChartOutlined, CalendarOutlined, ExperimentOutlined, LogoutOutlined, OrderedListOutlined, PieChartOutlined, SettingOutlined, SwapOutlined } from '@ant-design/icons'
 import { Button, Layout, Menu, Space, Typography } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 const { Header, Content, Sider } = Layout
 
-const items = [
+const baseItems = [
   { key: '/quotes', icon: <BarChartOutlined />, label: '行情中心' },
   { key: '/trade', icon: <SwapOutlined />, label: '交易' },
   { key: '/positions', icon: <PieChartOutlined />, label: '持仓' },
@@ -18,10 +18,16 @@ const items = [
 export default function MainLayout() {
   const location = useLocation()
   const navigate = useNavigate()
+  const isAdmin = localStorage.getItem('role') === 'admin'
+  const items = isAdmin
+    ? [...baseItems, { key: '/admin/users', icon: <SettingOutlined />, label: '账号管理' }]
+    : baseItems
+
   const logout = () => {
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('username')
+    localStorage.removeItem('role')
     navigate('/login', { replace: true })
   }
 

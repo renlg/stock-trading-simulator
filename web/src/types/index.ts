@@ -23,3 +23,7 @@ export interface Order {
 export interface Account {
   balance: number; marketValue: number; totalAssets: number; totalProfit: number; positions: Position[]
 }
+
+export interface AdminUser {
+  id: number; username: string; role: string; balance: number; status: string; createdAt: string
+}
