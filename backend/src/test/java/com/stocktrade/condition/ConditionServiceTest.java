@@ -43,10 +43,10 @@ class ConditionServiceTest {
     @Test
     void 买入价达到条件时应触发() {
         double price = stocks.get("000001").price();
-        conditions.create(userId, "000001", "buy", price, 10);
+        conditions.create(userId, "000001", "buy", price, 100);
         conditions.checkAndTrigger();
         assertStatus("TRIGGERED");
-        assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=?", Integer.class, userId)).isEqualTo(10);
+        assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=?", Integer.class, userId)).isEqualTo(100);
     }
 
     @Test
@@ -63,7 +63,7 @@ class ConditionServiceTest {
     @Test
     void 价格未达到时应保持活动() {
         double price = stocks.get("000001").price();
-        conditions.create(userId, "000001", "buy", price - 1, 10);
+        conditions.create(userId, "000001", "buy", price - 1, 100);
         conditions.checkAndTrigger();
         assertStatus("ACTIVE");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orders", Integer.class)).isZero();
@@ -73,7 +73,7 @@ class ConditionServiceTest {
     void 资金不足时应标记失败() {
         jdbc.update("UPDATE users SET balance=0 WHERE id=?", userId);
         double price = stocks.get("600519").price();
-        conditions.create(userId, "600519", "buy", price, 1);
+        conditions.create(userId, "600519", "buy", price, 100);
         conditions.checkAndTrigger();
         assertStatus("FAILED");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orders", Integer.class)).isZero();

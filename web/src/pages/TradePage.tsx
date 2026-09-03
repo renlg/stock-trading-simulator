@@ -52,7 +52,19 @@ export default function TradePage() {
       <Card bordered={false} title="提交委托" className="trade-form-card">
         <Form layout="vertical" className="trade-form">
           <Form.Item label="交易方向"><Segmented block value={side} options={[{ label: '买入', value: 'buy' }, { label: '卖出', value: 'sell' }]} onChange={(v) => setSide(v as typeof side)} /></Form.Item>
-          <Form.Item label="委托数量"><InputNumber min={1} step={100} precision={0} value={quantity} onChange={(v) => setQuantity(Number(v || 0))} addonAfter="股" style={{ width: '100%' }} /></Form.Item>
+          <Form.Item label="委托数量">
+            <InputNumber
+              min={side === 'buy' ? 100 : 1}
+              step={100}
+              precision={0}
+              value={quantity}
+              onChange={(v) => setQuantity(Number(v || 0))}
+              addonAfter="股"
+              placeholder={side === 'buy' ? '买入需为100股整数倍' : '卖出数量'}
+              style={{ width: '100%' }}
+            />
+            {side === 'buy' && <Typography.Text type="secondary" style={{ fontSize: 12 }}>买入数量必须为100的整数倍</Typography.Text>}
+          </Form.Item>
           <div className="estimate"><Typography.Text type="secondary">预计金额</Typography.Text><Typography.Title level={3}>{money((quote?.price || 0) * quantity)}</Typography.Title></div>
           <Button type="primary" danger={side === 'buy'} block size="large" loading={submitting} disabled={!quote || quantity <= 0} onClick={() => void submit()}>{side === 'buy' ? '买入' : '卖出'}</Button>
         </Form>

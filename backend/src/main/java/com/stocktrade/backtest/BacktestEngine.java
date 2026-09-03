@@ -1,5 +1,7 @@
 package com.stocktrade.backtest;
 
+import com.stocktrade.common.TradingRules;
+
 import java.util.*;
 
 /**
@@ -11,6 +13,7 @@ import java.util.*;
  * - 滑点: 买入 = 收盘价 × 1.001, 卖出 = 收盘价 × 0.999
  * - 涨跌停: 收盘价 ≥ 涨停价 → 买入不成交; 收盘价 ≤ 跌停价 → 卖出不成交
  * - 停牌: 当日无K线数据 → 不产生交易
+ * - T+1: 当日买入的股票, 次日才能卖出
  */
 public class BacktestEngine {
 
@@ -29,6 +32,7 @@ public class BacktestEngine {
     private double cash;
     private int shares;
     private double avgCost;
+    private int availableDay;
     private final List<Map<String, Object>> equityCurve = new ArrayList<>();
     private final List<Map<String, Object>> trades = new ArrayList<>();
     private int winCount = 0;
@@ -49,6 +53,7 @@ public class BacktestEngine {
         cash = initialCapital;
         shares = 0;
         avgCost = 0;
+        availableDay = -1;
         equityCurve.clear();
         trades.clear();
         winCount = 0;
@@ -60,7 +65,7 @@ public class BacktestEngine {
             KlineBar bar = klines.get(i);
 
             boolean isFirstDay = (i == 0);
-            double limitPct = getLimitPct(code, stockName);
+            double limitPct = TradingRules.getLimitPct(code, stockName);
 
             double limitUp = 0;
             double limitDown = 0;
@@ -73,9 +78,9 @@ public class BacktestEngine {
             Signal signal = strategy.generateSignal(klines, i, state);
 
             if (signal.action() == Signal.Action.BUY) {
-                executeBuy(bar, signal, prevClose, limitUp, isFirstDay);
+                executeBuy(i, bar, signal, prevClose, limitUp, isFirstDay);
             } else if (signal.action() == Signal.Action.SELL) {
-                executeSell(bar, signal, prevClose, limitDown, isFirstDay);
+                executeSell(i, bar, signal, prevClose, limitDown, isFirstDay);
             }
 
             double equity = cash + shares * bar.close();
@@ -90,7 +95,7 @@ public class BacktestEngine {
         return buildResult(klines);
     }
 
-    private void executeBuy(KlineBar bar, Signal signal, double prevClose, double limitUp, boolean isFirstDay) {
+    private void executeBuy(int dayIndex, KlineBar bar, Signal signal, double prevClose, double limitUp, boolean isFirstDay) {
         if (!isFirstDay && prevClose > 0 && bar.close() >= limitUp) {
             return;
         }
@@ -122,6 +127,7 @@ public class BacktestEngine {
         cash -= totalCost;
         avgCost = (shares > 0) ? (avgCost * shares + buyPrice * buyShares) / (shares + buyShares) : buyPrice;
         shares += buyShares;
+        availableDay = dayIndex + 1;
 
         Map<String, Object> trade = new LinkedHashMap<>();
         trade.put("date", bar.date());
@@ -134,8 +140,12 @@ public class BacktestEngine {
         trades.add(trade);
     }
 
-    private void executeSell(KlineBar bar, Signal signal, double prevClose, double limitDown, boolean isFirstDay) {
+    private void executeSell(int dayIndex, KlineBar bar, Signal signal, double prevClose, double limitDown, boolean isFirstDay) {
         if (shares <= 0) return;
+
+        if (dayIndex < availableDay) {
+            return;
+        }
 
         if (!isFirstDay && prevClose > 0 && bar.close() <= limitDown) {
             return;
@@ -243,24 +253,5 @@ public class BacktestEngine {
         double annualReturn = mean * 252;
         double annualStd = stdDev * Math.sqrt(252);
         return (annualReturn - RISK_FREE_RATE) / annualStd;
-    }
-
-    /**
-     * 根据股票代码判断涨跌停幅度
-     * - 300/301开头: 创业板 20%
-     * - 688开头: 科创板 20%
-     * - 名称含ST: 5%
-     * - 其他(主板): 10%
-     */
-    static double getLimitPct(String code, String name) {
-        if (code != null) {
-            if (code.startsWith("300") || code.startsWith("301") || code.startsWith("688") || code.startsWith("689")) {
-                return 0.20;
-            }
-        }
-        if (name != null && name.contains("ST")) {
-            return 0.05;
-        }
-        return 0.10;
     }
 }

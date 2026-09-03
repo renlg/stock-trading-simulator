@@ -14,7 +14,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.util.List;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,14 +35,13 @@ class TradeServiceTest {
     @Autowired StockService stocks;
     @MockBean RealTimeQuoteService realTime;
     @MockBean StockPoolService pool;
-    @MockBean QuoteEngine quoteEngine; // 覆盖真实引擎, 避免真实初始化连库
+    @MockBean QuoteEngine quoteEngine;
     private long userId;
 
     @BeforeEach
     void prepare() {
-        // 实时报价 mock 固定返回 100.0, 成交价确定可断言
-        Mockito.when(realTime.fetchPrice(Mockito.anyString())).thenReturn(100.0);
-        // 股票池 mock: realQuote 返回固定真实价
+        Mockito.when(realTime.fetchQuote(Mockito.anyString()))
+                .thenReturn(new RealTimeQuoteService.RealtimeQuote(100.0, 95.0, 10000));
         Mockito.when(pool.realQuote(Mockito.anyString())).thenReturn(Map.of(
                 "code", "000001", "name", "平安银行",
                 "price", 11.0, "prevClose", 10.0,
@@ -56,17 +56,18 @@ class TradeServiceTest {
         jdbc.update("DELETE FROM stocks");
         jdbc.update("INSERT INTO users(username,password_hash,balance,created_at) VALUES('交易测试','x',1000000,'now')");
         userId = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
-        // 预置 000001 到内存行情(否则 ensureLoaded 走 mock realQuote)
         stocks.reload();
-        stocks.put(new StockQuote("000001", "平安银行", 10.0, 11.0, 11.5, 10.5, "now"));
+        stocks.put(new StockQuote("000001", "平安银行", 10.0, 10.5, 11.5, 10.5, "now"));
     }
 
     @Test
     void 买入应扣减资金并建立持仓() {
         trades.execute(userId, "000001", "buy", 100, "web");
 
+        double commission = Math.max(100.0 * 100 * 0.00025, 5.0);
+        double expectedBalance = 1_000_000 - 100.0 * 100 - commission;
         assertThat(jdbc.queryForObject("SELECT balance FROM users WHERE id=?", Double.class, userId))
-                .isEqualTo(1_000_000 - 100.0 * 100);
+                .isEqualTo(expectedBalance);
         assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=? AND code='000001'", Integer.class, userId))
                 .isEqualTo(100);
     }
@@ -74,39 +75,89 @@ class TradeServiceTest {
     @Test
     void 卖出应增加资金并减少持仓() {
         trades.execute(userId, "000001", "buy", 100, "web");
+        String pastDate = LocalDate.now().minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        jdbc.update("UPDATE positions SET available_date=? WHERE user_id=? AND code='000001'",
+                pastDate, userId);
+
         trades.execute(userId, "000001", "sell", 40, "web");
+
+        double buyCommission = Math.max(100.0 * 100 * 0.00025, 5.0);
+        double sellAmount = 100.0 * 40;
+        double sellCommission = Math.max(sellAmount * 0.00025, 5.0);
+        double stampDuty = sellAmount * 0.0005;
+        double expectedBalance = 1_000_000 - 100.0 * 60 - buyCommission - sellCommission - stampDuty;
 
         assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=? AND code='000001'", Integer.class, userId))
                 .isEqualTo(60);
         assertThat(jdbc.queryForObject("SELECT balance FROM users WHERE id=?", Double.class, userId))
-                .isEqualTo(1_000_000 - 100.0 * 60);
+                .isEqualTo(expectedBalance);
     }
 
     @Test
     void 资金不足时应拒绝买入且不写订单() {
         jdbc.update("UPDATE users SET balance=1 WHERE id=?", userId);
-        assertThatThrownBy(() -> trades.execute(userId, "600519", "buy", 1, "web"))
+        assertThatThrownBy(() -> trades.execute(userId, "600519", "buy", 100, "web"))
                 .isInstanceOf(BusinessException.class).hasMessage("可用资金不足");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM orders", Integer.class)).isZero();
     }
 
     @Test
     void 实时价失败时应降级为本地行情价成交() {
-        // mock 返回 -1 模拟实时接口失败 -> 应降级到本地行情价
-        Mockito.when(realTime.fetchPrice(Mockito.anyString())).thenReturn(-1.0);
+        Mockito.when(realTime.fetchQuote(Mockito.anyString())).thenReturn(null);
         double localPrice = stocks.get("000001").price();
-        trades.execute(userId, "000001", "buy", 10, "web");
+        trades.execute(userId, "000001", "buy", 100, "web");
         assertThat(jdbc.queryForObject("SELECT price FROM orders WHERE code='000001'", Double.class))
                 .isEqualTo(localPrice);
     }
 
     @Test
     void 未在行情池的股票应从真实数据源加载并成交() {
-        // 移除预置, 让 ensureLoaded 走 mock realQuote
         jdbc.update("DELETE FROM stocks WHERE code='000001'");
         stocks.reload();
-        trades.execute(userId, "000001", "buy", 10, "web");
+        trades.execute(userId, "000001", "buy", 100, "web");
         assertThat(jdbc.queryForObject("SELECT quantity FROM positions WHERE user_id=? AND code='000001'", Integer.class, userId))
-                .isEqualTo(10);
+                .isEqualTo(100);
+    }
+
+    @Test
+    void 买入数量非100整数倍应拒绝() {
+        assertThatThrownBy(() -> trades.execute(userId, "000001", "buy", 50, "web"))
+                .isInstanceOf(BusinessException.class).hasMessage("买入数量必须为100股整数倍");
+    }
+
+    @Test
+    void 停牌股票应拒绝交易() {
+        Mockito.when(realTime.fetchQuote(Mockito.anyString()))
+                .thenReturn(new RealTimeQuoteService.RealtimeQuote(100.0, 95.0, 0));
+        assertThatThrownBy(() -> trades.execute(userId, "000001", "buy", 100, "web"))
+                .isInstanceOf(BusinessException.class).hasMessage("股票停牌无法交易");
+    }
+
+    @Test
+    void 涨停股票应拒绝买入() {
+        Mockito.when(realTime.fetchQuote(Mockito.anyString()))
+                .thenReturn(new RealTimeQuoteService.RealtimeQuote(11.0, 10.0, 10000));
+        assertThatThrownBy(() -> trades.execute(userId, "000001", "buy", 100, "web"))
+                .isInstanceOf(BusinessException.class).hasMessage("涨停无法买入");
+    }
+
+    @Test
+    void 跌停股票应拒绝卖出() {
+        trades.execute(userId, "000001", "buy", 100, "web");
+        String pastDate = LocalDate.now().minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        jdbc.update("UPDATE positions SET available_date=? WHERE user_id=? AND code='000001'",
+                pastDate, userId);
+
+        Mockito.when(realTime.fetchQuote(Mockito.anyString()))
+                .thenReturn(new RealTimeQuoteService.RealtimeQuote(9.0, 10.0, 10000));
+        assertThatThrownBy(() -> trades.execute(userId, "000001", "sell", 100, "web"))
+                .isInstanceOf(BusinessException.class).hasMessage("跌停无法卖出");
+    }
+
+    @Test
+    void T1限制当天买入不能当天卖出() {
+        trades.execute(userId, "000001", "buy", 100, "web");
+        assertThatThrownBy(() -> trades.execute(userId, "000001", "sell", 100, "web"))
+                .isInstanceOf(BusinessException.class).hasMessage("T+1限制：当天买入的股票当天不能卖出");
     }
 }

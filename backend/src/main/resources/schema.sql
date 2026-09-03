@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS positions (
     code TEXT,
     quantity INTEGER,
     avg_cost REAL,
+    available_date TEXT,
     updated_at TEXT,
     PRIMARY KEY(user_id, code)
 );
