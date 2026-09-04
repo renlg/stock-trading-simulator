@@ -288,6 +288,12 @@ public class StockPoolService {
         result.put("northbound", northbound(code));
         result.put("financial", newsFeed.financial(code));
         result.put("events", newsFeed.events(code));
+        result.put("finForecast", finForecast(code));
+        result.put("finBalance", finBalance(code));
+        result.put("finCashflow", finCashflow(code));
+        result.put("finIndicator", finIndicator(code));
+        result.put("finPledge", finPledge(code));
+        result.put("finConsensusExt", finConsensusExt(code));
         return result;
     }
 
@@ -418,6 +424,174 @@ public class StockPoolService {
                         m.put("orgQuantity", rs.getInt("org_quantity"));
                         m.put("totalSharesRatio", rs.getDouble("total_shares_ratio"));
                         m.put("dateType", rs.getString("date_type"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 业绩预告: 按报告期倒序 */
+    public List<Map<String, Object>> finForecast(String code) {
+        try {
+            return astock.query(
+                    "SELECT * FROM fin_forecast_detail WHERE sec_code=? ORDER BY report_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secCode", rs.getString("sec_code"));
+                        m.put("reportDate", rs.getString("report_date"));
+                        m.put("noticeDate", rs.getString("notice_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("fcType", rs.getString("fc_type"));
+                        m.put("predictLow", rs.getDouble("predict_low"));
+                        m.put("predictHigh", rs.getDouble("predict_high"));
+                        m.put("yoyLow", rs.getDouble("yoy_low"));
+                        m.put("yoyHigh", rs.getDouble("yoy_high"));
+                        m.put("priorYearNet", rs.getDouble("prior_year_net"));
+                        m.put("reason", rs.getString("reason"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 资产负债数据: 按报告期倒序 */
+    public List<Map<String, Object>> finBalance(String code) {
+        try {
+            return astock.query(
+                    "SELECT * FROM fin_balance WHERE sec_code=? ORDER BY report_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secCode", rs.getString("sec_code"));
+                        m.put("reportDate", rs.getString("report_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("opinionType", rs.getString("opinion_type"));
+                        m.put("osopinionType", rs.getString("osopinion_type"));
+                        m.put("monetaryFunds", rs.getDouble("monetary_funds"));
+                        m.put("shortLoan", rs.getDouble("short_loan"));
+                        m.put("accountsRece", rs.getDouble("accounts_rece"));
+                        m.put("notesRece", rs.getDouble("notes_rece"));
+                        m.put("inventory", rs.getDouble("inventory"));
+                        m.put("goodwill", rs.getDouble("goodwill"));
+                        m.put("totalAssets", rs.getDouble("total_assets"));
+                        m.put("totalLiab", rs.getDouble("total_liab"));
+                        m.put("equity", rs.getDouble("equity"));
+                        m.put("fixedAsset", rs.getDouble("fixed_asset"));
+                        m.put("assetImpairment", rs.getDouble("asset_impairment"));
+                        m.put("noticeDate", rs.getString("notice_date"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 现金流量数据: 按报告期倒序 */
+    public List<Map<String, Object>> finCashflow(String code) {
+        try {
+            return astock.query(
+                    "SELECT * FROM fin_cashflow WHERE sec_code=? ORDER BY report_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secCode", rs.getString("sec_code"));
+                        m.put("reportDate", rs.getString("report_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("netcashOperate", rs.getDouble("netcash_operate"));
+                        m.put("netcashInvest", rs.getDouble("netcash_invest"));
+                        m.put("netcashFinance", rs.getDouble("netcash_finance"));
+                        m.put("totalInflow", rs.getDouble("total_inflow"));
+                        m.put("totalOutflow", rs.getDouble("total_outflow"));
+                        m.put("noticeDate", rs.getString("notice_date"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 财务指标: 按报告期倒序 */
+    public List<Map<String, Object>> finIndicator(String code) {
+        try {
+            return astock.query(
+                    "SELECT * FROM fin_indicator WHERE sec_code=? ORDER BY report_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secCode", rs.getString("sec_code"));
+                        m.put("reportDate", rs.getString("report_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("roeJq", rs.getDouble("roe_jq"));
+                        m.put("roeKc", rs.getDouble("roe_kc"));
+                        m.put("grossMargin", rs.getDouble("gross_margin"));
+                        m.put("netMargin", rs.getDouble("net_margin"));
+                        m.put("epsJb", rs.getDouble("eps_jb"));
+                        m.put("epsKc", rs.getDouble("eps_kc"));
+                        m.put("kcfjcSyjlr", rs.getDouble("kcfjc_syjlr"));
+                        m.put("parentNetprofit", rs.getDouble("parent_netprofit"));
+                        m.put("oiYoy", rs.getDouble("oi_yoy"));
+                        m.put("npYoy", rs.getDouble("np_yoy"));
+                        m.put("perNetcash", rs.getDouble("per_netcash"));
+                        m.put("assetLiabRatio", rs.getDouble("asset_liab_ratio"));
+                        m.put("debtAssetRatio", rs.getDouble("debt_asset_ratio"));
+                        m.put("roic", rs.getDouble("roic"));
+                        m.put("noticeDate", rs.getString("notice_date"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 股权质押: 按质押日期倒序 */
+    public List<Map<String, Object>> finPledge(String code) {
+        try {
+            return astock.query(
+                    "SELECT * FROM fin_pledge WHERE sec_code=? ORDER BY pledge_date DESC",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secCode", rs.getString("sec_code"));
+                        m.put("pledgeDate", rs.getString("pledge_date"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("holderName", rs.getString("holder_name"));
+                        m.put("accumPledgeTsr", rs.getDouble("accum_pledge_tsr"));
+                        m.put("pledgeRatio", rs.getDouble("pledge_ratio"));
+                        m.put("warningState", rs.getString("warning_state"));
+                        m.put("unfreezeState", rs.getString("unfreeze_state"));
+                        m.put("pledgeAmount", rs.getDouble("pledge_amount"));
+                        m.put("accumAmount", rs.getDouble("accum_amount"));
+                        return m;
+                    }, code);
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /** 扩展一致预期快照 */
+    public List<Map<String, Object>> finConsensusExt(String code) {
+        try {
+            return astock.query(
+                    "SELECT * FROM fin_consensus_ext WHERE sec_code=?",
+                    (rs, n) -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("secCode", rs.getString("sec_code"));
+                        m.put("secName", rs.getString("sec_name"));
+                        m.put("ratingOrgNum", rs.getDouble("rating_org_num"));
+                        m.put("ratingBuy", rs.getDouble("rating_buy"));
+                        m.put("ratingAdd", rs.getDouble("rating_add"));
+                        m.put("ratingNeutral", rs.getDouble("rating_neutral"));
+                        m.put("ratingReduce", rs.getDouble("rating_reduce"));
+                        m.put("ratingSale", rs.getDouble("rating_sale"));
+                        m.put("eps1", rs.getDouble("eps1"));
+                        m.put("year1", rs.getString("year1"));
+                        m.put("eps2", rs.getDouble("eps2"));
+                        m.put("year2", rs.getString("year2"));
+                        m.put("eps3", rs.getDouble("eps3"));
+                        m.put("year3", rs.getString("year3"));
+                        m.put("eps4", rs.getDouble("eps4"));
+                        m.put("year4", rs.getString("year4"));
+                        m.put("aimpriceMax", rs.getDouble("aimprice_max"));
+                        m.put("aimpriceMin", rs.getDouble("aimprice_min"));
+                        m.put("fetchDate", rs.getString("fetch_date"));
                         return m;
                     }, code);
         } catch (Exception e) {

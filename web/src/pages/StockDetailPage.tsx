@@ -96,6 +96,108 @@ interface ConsensusItem {
   fetchDate: string
 }
 
+interface FinForecastItem {
+  secCode: string
+  reportDate: string
+  noticeDate: string
+  secName: string
+  fcType: string
+  predictLow: number
+  predictHigh: number
+  yoyLow: number
+  yoyHigh: number
+  priorYearNet: number
+  reason: string
+}
+
+interface FinBalanceItem {
+  secCode: string
+  reportDate: string
+  secName: string
+  opinionType: string | null
+  osopinionType: string | null
+  monetaryFunds: number
+  shortLoan: number
+  accountsRece: number
+  notesRece: number
+  inventory: number
+  goodwill: number
+  totalAssets: number
+  totalLiab: number
+  equity: number
+  fixedAsset: number
+  assetImpairment: number
+  noticeDate: string
+}
+
+interface FinCashflowItem {
+  secCode: string
+  reportDate: string
+  secName: string
+  netcashOperate: number
+  netcashInvest: number
+  netcashFinance: number
+  totalInflow: number
+  totalOutflow: number
+  noticeDate: string
+}
+
+interface FinIndicatorItem {
+  secCode: string
+  reportDate: string
+  secName: string
+  roeJq: number
+  roeKc: number
+  grossMargin: number
+  netMargin: number
+  epsJb: number
+  epsKc: number
+  kcfjcSyjlr: number
+  parentNetprofit: number
+  oiYoy: number
+  npYoy: number
+  perNetcash: number
+  assetLiabRatio: number
+  debtAssetRatio: number
+  roic: number
+  noticeDate: string
+}
+
+interface FinPledgeItem {
+  secCode: string
+  pledgeDate: string
+  secName: string
+  holderName: string
+  accumPledgeTsr: number
+  pledgeRatio: number
+  warningState: string | null
+  unfreezeState: string | null
+  pledgeAmount: number
+  accumAmount: number
+}
+
+interface FinConsensusExtItem {
+  secCode: string
+  secName: string
+  ratingOrgNum: number
+  ratingBuy: number
+  ratingAdd: number
+  ratingNeutral: number
+  ratingReduce: number
+  ratingSale: number
+  eps1: number
+  year1: string
+  eps2: number
+  year2: string
+  eps3: number
+  year3: string
+  eps4: number
+  year4: string
+  aimpriceMax: number
+  aimpriceMin: number
+  fetchDate: string
+}
+
 interface NorthboundItem {
   endDate: string
   secName: string
@@ -134,6 +236,12 @@ interface DetailData {
   holder: HolderItem[]
   margin: MarginItem[]
   consensus: ConsensusItem[]
+  finForecast: FinForecastItem[]
+  finBalance: FinBalanceItem[]
+  finCashflow: FinCashflowItem[]
+  finIndicator: FinIndicatorItem[]
+  finPledge: FinPledgeItem[]
+  finConsensusExt: FinConsensusExtItem[]
   northbound: NorthboundItem[]
   financial: FinancialItem[]
   events: EventsItem[]
@@ -595,6 +703,66 @@ export default function StockDetailPage() {
     { title: '涨跌幅(%)', dataIndex: 'rzrqChg', render: (v: number) => <span style={{ color: riseColor(v) }}>{signedPct(v)}</span> },
   ]
 
+  const finBalanceColumns: ColumnsType<FinBalanceItem> = [
+    { title: '报告期', dataIndex: 'reportDate', width: 110 },
+    { title: '货币资金', dataIndex: 'monetaryFunds', render: (v: number) => bigMoney(v) },
+    { title: '短期借款', dataIndex: 'shortLoan', render: (v: number) => bigMoney(v) },
+    { title: '应收账款', dataIndex: 'accountsRece', render: (v: number) => bigMoney(v) },
+    { title: '存货', dataIndex: 'inventory', render: (v: number) => bigMoney(v) },
+    { title: '商誉', dataIndex: 'goodwill', render: (v: number) => bigMoney(v) },
+    { title: '总资产', dataIndex: 'totalAssets', render: (v: number) => bigMoney(v) },
+    { title: '总负债', dataIndex: 'totalLiab', render: (v: number) => bigMoney(v) },
+    { title: '净资产', dataIndex: 'equity', render: (v: number) => bigMoney(v) },
+    { title: '审计意见', dataIndex: 'opinionType', width: 130, render: (v: string | null) => v ? <Tag color="red">{v}</Tag> : '-' },
+  ]
+
+  const finCashflowColumns: ColumnsType<FinCashflowItem> = [
+    { title: '报告期', dataIndex: 'reportDate', width: 110 },
+    { title: '经营净额', dataIndex: 'netcashOperate', render: (v: number) => bigMoney(v) },
+    { title: '投资净额', dataIndex: 'netcashInvest', render: (v: number) => bigMoney(v) },
+    { title: '筹资净额', dataIndex: 'netcashFinance', render: (v: number) => bigMoney(v) },
+  ]
+
+  const finIndicatorColumns: ColumnsType<FinIndicatorItem> = [
+    { title: '报告期', dataIndex: 'reportDate', width: 110 },
+    { title: '加权ROE(%)', dataIndex: 'roeJq', render: (v: number) => v?.toFixed(2) },
+    { title: '扣非ROE(%)', dataIndex: 'roeKc', render: (v: number) => v?.toFixed(2) },
+    { title: '毛利率(%)', dataIndex: 'grossMargin', render: (v: number) => v?.toFixed(2) },
+    { title: '净利率(%)', dataIndex: 'netMargin', render: (v: number) => v?.toFixed(2) },
+    { title: '基本EPS', dataIndex: 'epsJb', render: (v: number) => v?.toFixed(2) },
+    { title: '扣非EPS', dataIndex: 'epsKc', render: (v: number) => v?.toFixed(2) },
+    { title: '扣非净利', dataIndex: 'kcfjcSyjlr', render: (v: number) => bigMoney(v) },
+    { title: '归母净利', dataIndex: 'parentNetprofit', render: (v: number) => bigMoney(v) },
+    { title: '营收同比(%)', dataIndex: 'oiYoy', render: (v: number) => v?.toFixed(2) },
+    { title: '净利同比(%)', dataIndex: 'npYoy', render: (v: number) => v?.toFixed(2) },
+    { title: '每股经营现金流', dataIndex: 'perNetcash', render: (v: number) => v?.toFixed(2) },
+    { title: '资产负债率(%)', dataIndex: 'assetLiabRatio', render: (v: number) => v?.toFixed(2) },
+  ]
+
+  const finPledgeColumns: ColumnsType<FinPledgeItem> = [
+    { title: '质押日期', dataIndex: 'pledgeDate', width: 110 },
+    { title: '股东', dataIndex: 'holderName', width: 160 },
+    { title: '累计质押占比(%)', dataIndex: 'accumPledgeTsr', render: (v: number) => v?.toFixed(2) },
+    { title: '本次质押占持股(%)', dataIndex: 'pledgeRatio', render: (v: number) => v?.toFixed(2) },
+    { title: '预警状态', dataIndex: 'warningState', width: 120, render: (v: string | null) => v ? <Tag color="red">{v}</Tag> : '-' },
+    { title: '解押状态', dataIndex: 'unfreezeState', render: (v: string | null) => v || '-' },
+    { title: '质押股数', dataIndex: 'pledgeAmount', render: (v: number) => bigMoney(v) },
+    { title: '累计质押股数', dataIndex: 'accumAmount', render: (v: number) => bigMoney(v) },
+  ]
+
+  const forecastTypeColors: Record<string, string> = {
+    '预增': 'red', '略增': 'volcano', '扭亏': 'green', '续盈': 'cyan', '减亏': 'blue',
+    '预减': 'orange', '略减': 'gold', '首亏': 'purple', '续亏': 'magenta',
+  }
+
+  const finForecastColumns: ColumnsType<FinForecastItem> = [
+    { title: '报告期', dataIndex: 'reportDate', width: 110 },
+    { title: '预告类型', dataIndex: 'fcType', width: 100, render: (v: string) => v ? <Tag color={forecastTypeColors[v] || 'default'}>{v}</Tag> : '-' },
+    { title: '净利预测区间', render: (_: unknown, r: FinForecastItem) => `${bigMoney(r.predictLow)} ~ ${bigMoney(r.predictHigh)}` },
+    { title: '同比区间(%)', render: (_: unknown, r: FinForecastItem) => `${r.yoyLow?.toFixed(2)} ~ ${r.yoyHigh?.toFixed(2)}` },
+    { title: '上年同期', dataIndex: 'priorYearNet', render: (v: number) => bigMoney(v) },
+  ]
+
   const northboundColumns: ColumnsType<NorthboundItem> = [
     { title: '日期', dataIndex: 'endDate', width: 110 },
     { title: '持股(万股)', dataIndex: 'holdShares', render: (v: number) => (v / 1e4).toFixed(2) },
@@ -684,9 +852,74 @@ export default function StockDetailPage() {
               {c.year4 && <Descriptions.Item label={`${c.year4}E EPS`}>{c.eps4?.toFixed(2)}</Descriptions.Item>}
             </Descriptions>
             <div ref={ratingChartRef} style={{ width: '100%', height: 280 }} />
+            {detail.finConsensusExt?.length ? (() => {
+              const ext = detail.finConsensusExt[0]
+              return (
+                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                  <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered title="扩展一致预期">
+                    <Descriptions.Item label="目标价区间">{ext.aimpriceMin.toFixed(2)} ~ {ext.aimpriceMax.toFixed(2)}</Descriptions.Item>
+                    <Descriptions.Item label="更新日期">{ext.fetchDate}</Descriptions.Item>
+                  </Descriptions>
+                  <Descriptions size="small" column={{ xs: 2, sm: 3, md: 6 }} bordered title="机构评级分布">
+                    <Descriptions.Item label="机构数"><span style={{ color: '#595959', fontWeight: 600 }}>{ext.ratingOrgNum}</span>家</Descriptions.Item>
+                    <Descriptions.Item label="买入"><span style={{ color: '#f5222d', fontWeight: 600 }}>{ext.ratingBuy}</span>家</Descriptions.Item>
+                    <Descriptions.Item label="增持"><span style={{ color: '#fa8c16', fontWeight: 600 }}>{ext.ratingAdd}</span>家</Descriptions.Item>
+                    <Descriptions.Item label="中性"><span style={{ color: '#1677ff', fontWeight: 600 }}>{ext.ratingNeutral}</span>家</Descriptions.Item>
+                    <Descriptions.Item label="减持"><span style={{ color: '#52c41a', fontWeight: 600 }}>{ext.ratingReduce}</span>家</Descriptions.Item>
+                    <Descriptions.Item label="卖出"><span style={{ color: '#8c8c8c', fontWeight: 600 }}>{ext.ratingSale}</span>家</Descriptions.Item>
+                  </Descriptions>
+                  <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered title="未来 EPS 预测">
+                    {ext.year1 && <Descriptions.Item label={`${ext.year1}E EPS`}>{ext.eps1?.toFixed(2)}</Descriptions.Item>}
+                    {ext.year2 && <Descriptions.Item label={`${ext.year2}E EPS`}>{ext.eps2?.toFixed(2)}</Descriptions.Item>}
+                    {ext.year3 && <Descriptions.Item label={`${ext.year3}E EPS`}>{ext.eps3?.toFixed(2)}</Descriptions.Item>}
+                    {ext.year4 && <Descriptions.Item label={`${ext.year4}E EPS`}>{ext.eps4?.toFixed(2)}</Descriptions.Item>}
+                  </Descriptions>
+                </Space>
+              )
+            })() : null}
           </Space>
         )
       })() : <Empty description="暂无一致预期数据" />,
+    },
+    {
+      key: 'finAnalysis',
+      label: '财务分析',
+      children: detail && (detail.finBalance?.length || detail.finCashflow?.length || detail.finIndicator?.length) ? (
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          {detail.finBalance?.length ? (
+            <div>
+              <Typography.Text strong>资产负债</Typography.Text>
+              <Table<FinBalanceItem> columns={finBalanceColumns} dataSource={detail.finBalance} rowKey="reportDate" size="small" pagination={false} scroll={{ x: 1100 }} style={{ marginTop: 8 }} />
+            </div>
+          ) : null}
+          {detail.finCashflow?.length ? (
+            <div>
+              <Typography.Text strong>现金流量</Typography.Text>
+              <Table<FinCashflowItem> columns={finCashflowColumns} dataSource={detail.finCashflow} rowKey="reportDate" size="small" pagination={false} scroll={{ x: 600 }} style={{ marginTop: 8 }} />
+            </div>
+          ) : null}
+          {detail.finIndicator?.length ? (
+            <div>
+              <Typography.Text strong>财务指标</Typography.Text>
+              <Table<FinIndicatorItem> columns={finIndicatorColumns} dataSource={detail.finIndicator} rowKey="reportDate" size="small" pagination={false} scroll={{ x: 1500 }} style={{ marginTop: 8 }} />
+            </div>
+          ) : null}
+        </Space>
+      ) : <Empty description="暂无财务分析数据" />,
+    },
+    {
+      key: 'pledge',
+      label: '质押',
+      children: detail?.finPledge?.length ? (
+        <Table<FinPledgeItem> columns={finPledgeColumns} dataSource={detail.finPledge} rowKey="pledgeDate" size="small" pagination={false} scroll={{ x: 1000 }} />
+      ) : <Empty description="暂无质押数据" />,
+    },
+    {
+      key: 'forecast',
+      label: '业绩预告',
+      children: detail?.finForecast?.length ? (
+        <Table<FinForecastItem> columns={finForecastColumns} dataSource={detail.finForecast} rowKey="reportDate" size="small" pagination={false} scroll={{ x: 850 }} />
+      ) : <Empty description="暂无业绩预告数据" />,
     },
     {
       key: 'northbound',
