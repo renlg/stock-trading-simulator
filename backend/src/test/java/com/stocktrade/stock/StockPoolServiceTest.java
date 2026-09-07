@@ -55,7 +55,8 @@ class StockPoolServiceTest {
             insertMin5(astock, code, "2026-09-02 15:00:00", 4.8, 5.1, 4.7, 5.0);
         }
 
-        pool = new StockPoolService(Mockito.mock(JdbcTemplate.class), astock, Mockito.mock(NewsFeedClient.class));
+        pool = new StockPoolService(Mockito.mock(JdbcTemplate.class), astock, Mockito.mock(NewsFeedClient.class),
+                Mockito.mock(Min5BackfillService.class));
     }
 
     @Test

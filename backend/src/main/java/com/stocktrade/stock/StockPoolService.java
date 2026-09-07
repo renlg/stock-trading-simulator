@@ -29,11 +29,14 @@ public class StockPoolService {
     private final JdbcTemplate jdbc;      // 模拟盘自己的库
     private final JdbcTemplate astock;    // /opt/a-stock 只读库
     private final NewsFeedClient newsFeed;
+    private final Min5BackfillService min5BackfillService;
 
-    public StockPoolService(JdbcTemplate jdbc, @Qualifier("aStockJdbc") JdbcTemplate astock, NewsFeedClient newsFeed) {
+    public StockPoolService(JdbcTemplate jdbc, @Qualifier("aStockJdbc") JdbcTemplate astock, NewsFeedClient newsFeed,
+                            Min5BackfillService min5BackfillService) {
         this.jdbc = jdbc;
         this.astock = astock;
         this.newsFeed = newsFeed;
+        this.min5BackfillService = min5BackfillService;
     }
 
     /** 启动迁移: 检测 watch_stocks 是否缺 user_id 列, 缺则 DROP 重建 */
@@ -87,6 +90,7 @@ public class StockPoolService {
         int rows = jdbc.update("INSERT OR IGNORE INTO watch_stocks(user_id,code,name,added_at) VALUES(?,?,?,?)",
                 userId, code, name, AuthService.now());
         if (rows == 0) throw BusinessException.badRequest("股票已在关注池: " + code);
+        min5BackfillService.backfillAsync(code);
     }
 
     /** 移除关注(按用户隔离) */
